@@ -1,0 +1,19 @@
+{
+  "name": "roilafx/consolevo",
+  "require": {
+
+  },
+  "autoload": {
+    "psr-4": {
+      "roilafx\\Consolevo\\": "src"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "roilafx\\Consolevo\\ConsolevoServiceProvider"
+      ]
+
+    }
+  }
+}
