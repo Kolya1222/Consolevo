@@ -73,6 +73,12 @@ export default class ConsoleManager {
          */
         this.editorId = null;
         
+        /**
+         * Идентификатор сессии для StateManager
+         * @type {string}
+         */
+        this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
         // ИНИЦИАЛИЗАЦИЯ ЛОГГЕРА
         this.log = logger('ConsoleManager');
     }
@@ -90,6 +96,7 @@ export default class ConsoleManager {
             await this.setupModules();
             this.setupEventListeners();
             this.loadAndApplyPreferences();
+            await this.restoreEditorState(); // ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ
             
             this.log.info('ConsoleManager успешно инициализирован');
         } catch (error) {
@@ -133,11 +140,24 @@ export default class ConsoleManager {
         this.getHistoryStats = () => this.modules.history?.getStats() || {};
         this.searchHistory = (pattern) => this.modules.history?.search(pattern) || [];
 
-        // STATE MANAGER ПРОКСИ-МЕТОДЫ
-        this.saveState = (key, data) => this.modules.state?.save(key, data);
-        this.loadState = (key) => this.modules.state?.load(key);
-        this.clearState = (key) => this.modules.state?.clear(key);
-        this.getStateKeys = () => this.modules.state?.getKeys() || [];
+        // STATE MANAGER ПРОКСИ-МЕТОДЫ (ОБНОВЛЕННЫЕ)
+        this.saveEditorState = () => {
+            if (!this.modules.state || !this.modules.editor) return false;
+            
+            const content = this.getEditorValue();
+            const cursor = this.modules.editor.getCursorPosition?.();
+            const selections = this.modules.editor.getSelections?.() || [];
+            
+            return this.modules.state.saveState(content, cursor, selections, {
+                sessionId: this.sessionId,
+                consoleType: this.config.consoleType
+            });
+        };
+        
+        this.loadEditorState = () => this.restoreEditorState();
+        this.getStateInfo = () => this.modules.state?.getStateInfo() || {};
+        this.clearEditorState = () => this.modules.state?.clearState();
+        this.getStateStats = () => this.modules.state?.getStats() || {};
 
         // EDITOR MANAGER ПРОКСИ-МЕТОДЫ
         this.getEditorValue = () => this.modules.editor?.getValue() || '';
@@ -308,10 +328,72 @@ export default class ConsoleManager {
             }
         }
 
+        // ИНТЕГРАЦИЯ STATE MANAGER С РЕДАКТОРОМ
+        if (this.modules.state && this.modules.editor && this.modules.editor.editor) {
+            // Настройка автосохранения через StateManager
+            this.modules.state.createAutoSave(this.modules.editor.editor);
+            
+            // Установка колбэка для AceEditor
+            this.modules.editor.setStateManagerCallback(() => {
+                this.saveEditorState();
+            });
+            
+            this.log.debug('StateManager интегрирован с AceEditor');
+        }
+
+        // НАСТРОЙКА АВТОСОХРАНЕНИЯ STATE MANAGER
+        if (this.modules.state && this.modules.editor && this.modules.editor.editor) {
+            this.modules.state.createAutoSave(this.modules.editor.editor);
+            this.log.debug('Автосохранение StateManager настроено');
+        }
+
         // НАСТРОЙКА РЕАКТИВНОСТИ НАСТРОЕК
         this.setupPreferencesReactivity();
         
         this.log.info('Все модули успешно интегрированы');
+    }
+
+    /**
+     * Восстанавливает состояние редактора из StateManager
+     * @async
+     * @returns {Promise<boolean>}
+     */
+    async restoreEditorState() {
+        if (!this.modules.state || !this.modules.editor) {
+            this.log.debug('StateManager или Editor недоступны для восстановления');
+            return false;
+        }
+        
+        try {
+            const state = this.modules.state.loadState();
+            if (!state) {
+                this.log.debug('Нет сохраненного состояния для восстановления');
+                return false;
+            }
+
+            const restored = this.modules.state.restoreToEditor(
+                this.modules.editor.editor, 
+                state
+            );
+            
+            if (restored) {
+                const stateInfo = this.modules.state.getStateInfo();
+                this.addInfo(`Состояние редактора восстановлено (${stateInfo?.lines || 0} строк, ${stateInfo?.age || 'недавно'})`);
+                
+                this.log.info('Состояние редактора восстановлено', {
+                    lines: stateInfo?.lines,
+                    contentLength: stateInfo?.contentLength,
+                    age: stateInfo?.age
+                });
+            }
+            
+            return restored;
+        } catch (error) {
+            this.log.error('Ошибка восстановления состояния редактора', { 
+                error: error.message 
+            });
+            return false;
+        }
     }
 
     /**
@@ -640,6 +722,9 @@ export default class ConsoleManager {
         this.isExecuting = true;
         const code = this.getEditorValue();
         
+        // СОХРАНЯЕМ СОСТОЯНИЕ ПЕРЕД ВЫПОЛНЕНИЕМ
+        this.saveEditorState();
+        
         // ВАЛИДАЦИЯ КОДА ПЕРЕД ВЫПОЛНЕНИЕМ
         const validation = validateCode(code, this.config.consoleType);
         if (!validation.valid) {
@@ -781,6 +866,7 @@ export default class ConsoleManager {
         this.clearEditor();
         this.clearOutput();
         this.clearHistory();
+        this.clearEditorState();
         this.addSuccess('Все данные очищены');
     }
 
@@ -793,6 +879,7 @@ export default class ConsoleManager {
             output: this.getOutputStats(),
             history: this.getHistoryStats(),
             editor: this.getEditorStats(),
+            state: this.getStateStats(),
             theme: this.modules.theme?.getStats() || {},
             preferences: this.getAllPreferences(),
             consoleType: this.config.consoleType,
@@ -805,6 +892,12 @@ export default class ConsoleManager {
      */
     destroy() {
         this.log.info('Начало уничтожения ConsoleManager');
+        
+        // СОХРАНЯЕМ СОСТОЯНИЕ ПЕРЕД УНИЧТОЖЕНИЕМ
+        if (this.modules.state) {
+            this.saveEditorState();
+            this.log.debug('Состояние сохранено перед уничтожением');
+        }
         
         // ОЧИСТКА МЕНЕДЖЕРА КЛАВИАТУРЫ
         if (this.modules.keyboard) {

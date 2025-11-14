@@ -5,6 +5,7 @@ import {
 import { EDITOR_CONFIG, THEMES, MODES } from '../utils/constants.js';
 import { 
     logger,
+    getCsrfToken,
     debounce,
     detectLanguage,
     estimateComplexity,
@@ -69,8 +70,8 @@ export default class AceEditor {
         /** @type {Object} Логгер */
         this.log = logger('AceEditor');
         
-        /** @type {Function|null} Колбэк автосохранения */
-        this.autoSaveCallback = null;
+        /** @type {Function|null} Колбэк для StateManager */
+        this.stateManagerCallback = null;
         
         /** @type {Function} Обработчик изменений с дебаунсом */
         this.changeHandler = debounce(this._onChange.bind(this), 500);
@@ -267,7 +268,18 @@ export default class AceEditor {
         if (this.consoleType !== 'sql') return;
         
         try {
-            const response = await fetch('/consolevo/sql/tables');
+            const headers = {
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            };
+            
+            const response = await fetch('/consolevo/sql/tables', {
+                method: 'GET',
+                headers: headers,
+                credentials: 'include'  // ← Важно!
+            });
+            
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -319,11 +331,6 @@ export default class AceEditor {
                 enableBasicAutocompletion: true,
                 enableLiveAutocompletion: true,
                 enableSnippets: true
-            });
-
-            this.log.debug('Настроено автодополнение', {
-                type: this.consoleType,
-                snippetsCount: snippets.length
             });
 
         } catch (error) {
@@ -379,7 +386,7 @@ export default class AceEditor {
     }
 
     /**
-     * Настройка SQL completer для динамических подсказок (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+     * Настройка SQL completer для динамических подсказок
      */
     setupSqlCompleter(langTools) {
         if (this.sqlCompleter) {
@@ -764,9 +771,9 @@ export default class AceEditor {
             this.log.debug('Статистика кода', stats);
         }
         
-        // Вызов колбэка автосохранения
-        if (this.autoSaveCallback) {
-            this.autoSaveCallback(this.getState());
+        // ВЫЗОВ КОЛБЭКА STATE MANAGER вместо автосохранения
+        if (this.stateManagerCallback) {
+            this.stateManagerCallback();
         }
     }
 
@@ -936,39 +943,51 @@ export default class AceEditor {
     }
 
     /**
-     * Восстановление состояния
-     * @param {object} state - Состояние редактора
+     * Получение позиции курсора для StateManager
+     * @returns {Object|null}
      */
-    restoreState(state) {
-        if (!this.editor || !state) return;
+    getCursorPosition() {
+        return this.editor ? this.editor.getCursorPosition() : null;
+    }
 
-        if (state.content) {
-            this.setValue(state.content);
-        }
-        if (state.cursor) {
-            this.editor.moveCursorToPosition(state.cursor);
+    /**
+     * Получение выделений для StateManager
+     * @returns {Array}
+     */
+    getSelections() {
+        return this.editor ? this.editor.selection.getAllRanges() : [];
+    }
+
+    /**
+     * Перемещение курсора в позицию (для StateManager)
+     * @param {Object} position - Позиция {row, column}
+     */
+    moveCursorToPosition(position) {
+        if (this.editor && position) {
+            this.editor.moveCursorTo(position.row, position.column);
             this.editor.clearSelection();
         }
+    }
+
+    /**
+     * Восстановление выделений (для StateManager)
+     * @param {Array} selections - Массив выделений
+     */
+    restoreSelections(selections) {
+        if (!this.editor || !selections || !selections.length) return;
         
-        this.log.debug('Состояние восстановлено', {
-            hasContent: !isEmpty(state.content),
-            hasCursor: !isEmpty(state.cursor)
+        selections.forEach(selection => {
+            this.editor.selection.addRange(selection);
         });
     }
 
     /**
-     * Получение состояния редактора
-     * @returns {object|null}
+     * Установка колбэка для StateManager
+     * @param {Function} callback - Функция обратного вызова StateManager
      */
-    getState() {
-        return this.editor ? {
-            content: this.editor.getValue(),
-            cursor: this.editor.getCursorPosition(),
-            selections: this.editor.selection.getAllRanges(),
-            scrollTop: this.editor.session.getScrollTop(),
-            sessionId: this.sessionId,
-            timestamp: Date.now()
-        } : null;
+    setStateManagerCallback(callback) {
+        this.stateManagerCallback = callback;
+        this.log.debug('Колбэк StateManager установлен');
     }
 
     /**
@@ -984,15 +1003,6 @@ export default class AceEditor {
             detectedLanguage: detectLanguage(code),
             isEmpty: isEmpty(code)
         };
-    }
-
-    /**
-     * Установка колбэка автосохранения
-     * @param {Function} callback - Функция обратного вызова
-     */
-    setAutoSaveCallback(callback) {
-        this.autoSaveCallback = callback;
-        this.log.debug('Колбэк автосохранения установлен');
     }
 
     /**
@@ -1042,6 +1052,9 @@ export default class AceEditor {
             // Очистка данных
             this.databaseTables = [];
             this.tableColumns = {};
+            
+            // Очистка колбэка StateManager
+            this.stateManagerCallback = null;
             
             this.editor.destroy();
             this.editor = null;

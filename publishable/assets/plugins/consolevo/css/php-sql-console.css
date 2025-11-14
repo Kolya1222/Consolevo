@@ -1119,6 +1119,7 @@
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     font-size: 12px;
     line-height: 1.4;
+    white-space: normal;
 }
 
 .ace_doc-title {
@@ -1161,11 +1162,11 @@
 }
 
 .ace_doc-param-default {
-    color: #75715e;
+    color: #ffffff;
 }
 
 .ace_doc-param-desc {
-    color: #75715e;
+    color: #ffffff;
     font-size: 11px;
     margin-top: 2px;
     margin-left: 20px;
@@ -1175,3 +1176,4 @@
     color: #f8f8f2;
     line-height: 1.3;
 }
+

@@ -1,3 +1,4 @@
+import { getCsrfToken } from '../utils/helpers.js';
 /**
  * Анализатор Evolution CMS с загрузкой данных с сервера
  */
@@ -5,13 +6,28 @@ export async function analyzeEvolutionCMS() {
     try {
         console.log('Загрузка данных Evolution CMS с сервера...');
         
+        // Просто добавляем заголовки авторизации
+        const headers = {
+            'X-CSRF-TOKEN': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        };
+        
         // Сначала пробуем получить динамические данные
-        let response = await fetch('/consolevo/analysis/evo-data');
+        let response = await fetch('/consolevo/analysis/evo-data', {
+            method: 'GET',
+            headers: headers,
+            credentials: 'include'
+        });
         
         if (!response.ok) {
             // Если не получилось, используем статические данные
             console.log('Динамические данные недоступны, используем статические...');
-            response = await fetch('/consolevo/analysis/static-data');
+            response = await fetch('/consolevo/analysis/static-data', {
+                method: 'GET', 
+                headers: headers,
+                credentials: 'include'
+            });
         }
         
         const result = await response.json();
@@ -168,7 +184,6 @@ function generateMethodDocHTML(methodName, params, fullSignature) {
     return html;
 }
 
-// Добавьте эту функцию в analyze-evo.js
 function getMethodDescription(methodName) {
     const descriptions = {
         'getDocumentObject': 'Получает полный объект документа по ID',

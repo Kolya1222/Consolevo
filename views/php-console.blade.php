@@ -9,7 +9,7 @@
 @section('content')
 <div class="console-container">
     {{-- Заголовок --}}
-    @include('consolevo::components.console-header', [
+    @include('consolevo::partials.console-header', [
         'icon' => 'fab fa-php',
         'title' => 'PHP Console',
         'navigation' => [
@@ -22,7 +22,7 @@
     ])
 
     {{-- Карточка консоли --}}
-    @include('consolevo::components.console-card', [
+    @include('consolevo::partials.console-card', [
         'icon' => 'fas fa-code',
         'title' => 'Выполнение PHP кода',
         'executeRoute' => route('consolevo.php.execute'),
@@ -30,7 +30,7 @@
     ])
 
     {{-- Статус бар --}}
-    @include('consolevo::components.status-bar', [
+    @include('consolevo::partials.status-bar', [
         'items' => [
             [
                 'icon' => 'fas fa-code-branch',

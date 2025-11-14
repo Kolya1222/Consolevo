@@ -42,7 +42,7 @@
     </div>
 
     {{-- Статус бар --}}
-    @include('consolevo::components.status-bar', [
+    @include('consolevo::partials.status-bar', [
         'items' => [
             [
                 'icon' => 'fas fa-code-branch',

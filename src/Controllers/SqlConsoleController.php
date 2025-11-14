@@ -17,22 +17,11 @@ class SqlConsoleController
 
     public function index()
     {
-        if (!$this->hasAccess()) {
-            \abort(403, 'Доступ запрещен');
-        }
-        
         return view('consolevo::sql-console');
     }
 
     public function execute(Request $request): JsonResponse
     {
-        if (!$this->hasAccess()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Доступ запрещен. Только для администраторов.'
-            ], 403);
-        }
-        
         $query = trim($request->input('query', ''));
         
         if (empty($query)) {
@@ -90,9 +79,7 @@ class SqlConsoleController
                     'prefixed' => $tableName !== $cleanTableName
                 ];
                 
-                // СТРУКТУРА ДЛЯ ВСЕХ ТАБЛИЦ С ОБРАБОТКОЙ ОШИБОК
                 try {
-                    // ПРОБУЕМ DESCRIBE
                     $columns = DB::select("DESCRIBE `" . $tableName . "`");
                     $tableStructures[$cleanTableName] = array_map(function($col) {
                         return [
@@ -129,85 +116,57 @@ class SqlConsoleController
         }
     }
 
-    /**
-     * ПРОВЕРКА ДОСТУПА
-     */
-    private function hasAccess(): bool
+    private function getTablePrefix(): string
     {
-        // Способ 1: Прямая проверка сессии менеджера
-        if (isset($_SESSION['mgrValidated']) && $_SESSION['mgrValidated'] === true) {
-            return true;
-        }
-        
-        // Способ 2: Проверка через метод Evolution CMS с указанием контекста
-        if (method_exists($this->evo, 'getLoginUserType')) {
-            $userType = $this->evo->getLoginUserType('mgr');
-            if ($userType === 'manager') {
-                return true;
-            }
-        }
-        
-        // Способ 3: Проверка роли пользователя
-        if (isset($_SESSION['mgrRole']) && $_SESSION['mgrRole'] == 1) {
-            return true;
-        }
-        
-        // Способ 4: Проверка внутреннего ключа
-        if (isset($_SESSION['mgrInternalKey']) && !empty($_SESSION['mgrInternalKey'])) {
-            return true;
-        }
-        
-        return false;
+        $fullTableName = $this->evo->getFullTableName('site_content');
+        $prefix = str_replace('site_content', '', $fullTableName);
+        return $prefix ?: '';
     }
 
     /**
-     * Отладочная информация для проверки доступа
+     * Получить информацию о базе данных
      */
-    private function getAccessDebugInfo(): array
+    public function getDatabaseInfo(): JsonResponse
     {
-        return [
-            'session_mgrValidated' => $_SESSION['mgrValidated'] ?? 'not set',
-            'session_mgrRole' => $_SESSION['mgrRole'] ?? 'not set', 
-            'session_mgrInternalKey' => $_SESSION['mgrInternalKey'] ?? 'not set',
-            'evo_getLoginUserType_mgr' => method_exists($this->evo, 'getLoginUserType') ? 
-                $this->evo->getLoginUserType('mgr') : 'method not exists',
-            'evo_getLoginUserType_empty' => method_exists($this->evo, 'getLoginUserType') ? 
-                $this->evo->getLoginUserType() : 'method not exists',
-            'has_evolutionCMS_object' => !empty($this->evo) ? 'yes' : 'no'
-        ];
+        try {
+            $databaseName = DB::getDatabaseName();
+            $prefix = $this->getTablePrefix();
+            
+            return response()->json([
+                'success' => true,
+                'database_name' => $databaseName,
+                'table_prefix' => $prefix,
+                'connection' => DB::connection()->getConfig('driver')
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Не удалось получить информацию о базе данных: ' . $e->getMessage()
+            ]);
+        }
     }
-
-    // ... остальные методы (addTablePrefix, getTablePrefix, validateQuery и т.д.) без изменений ...
     
     private function addTablePrefix(string $query): string
     {
         $prefixedQuery = $query;
         $prefix = $this->getTablePrefix();
         
-        $evo_tables = [
-            'site_content', 'site_templates', 'site_htmlsnippets', 'site_snippets', 
-            'site_plugins', 'site_modules', 'manager_users', 'user_attributes',
-            'site_tmplvars', 'site_tmplvar_contentvalues', 'categories'
-        ];
+        $allTables = DB::select("SHOW TABLES");
+        $databaseName = DB::getDatabaseName();
+        $tableKey = 'Tables_in_' . $databaseName;
         
-        foreach ($evo_tables as $table) {
-            $fullTableName = $this->evo->getFullTableName($table);
+        foreach ($allTables as $tableInfo) {
+            $tableName = $tableInfo->{$tableKey};
+            $cleanName = str_replace($prefix, '', $tableName);
             
-            $pattern = '/\b' . preg_quote($table) . '\b/i';
-            $prefixedQuery = preg_replace($pattern, $fullTableName, $prefixedQuery);
-            
-            $qualifiedPattern = '/\b' . preg_quote($table) . '\.(\w+)\b/i';
-            $prefixedQuery = preg_replace($qualifiedPattern, $fullTableName . '.$1', $prefixedQuery);
+            if ($tableName !== $cleanName) {
+                $pattern = '/\b' . preg_quote($cleanName) . '\b/i';
+                $prefixedQuery = preg_replace($pattern, $tableName, $prefixedQuery);
+            }
         }
         
         return $prefixedQuery;
-    }
-
-    private function getTablePrefix(): string
-    {
-        $fullTableName = $this->evo->getFullTableName('site_content');
-        $prefix = str_replace('site_content', '', $fullTableName);
-        return $prefix ?: '';
     }
 
     private function validateQuery(string $query): array

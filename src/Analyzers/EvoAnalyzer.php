@@ -222,35 +222,4 @@ class EvoAnalyzer
 
         return $completionData;
     }
-
-    /**
-     * Генерирует данные для автодополнения в формате для IDE
-     */
-    public function generateIDECompletion()
-    {
-        $data = $this->generateCompletionData();
-        $output = "<?php\n\n/**\n * Auto-generated Evolution CMS completion data\n * Generated: {$data['generated_at']}\n */\n\n";
-
-        // Генерируем константы
-        foreach ($data['constants'] as $constant) {
-            $output .= "// Constant: {$constant}\n";
-        }
-
-        // Генерируем свойства
-        foreach ($data['properties'] as $property) {
-            $output .= "// Property: {$property}\n";
-        }
-
-        // Генерируем методы
-        foreach ($data['methods'] as $method) {
-            $output .= "// Method: {$method['full_signature']}\n";
-        }
-
-        // Генерируем функции
-        foreach ($data['functions'] as $function) {
-            $output .= "// Function: {$function['full_signature']}\n";
-        }
-
-        return $output;
-    }
 }

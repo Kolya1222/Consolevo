@@ -27,7 +27,7 @@ export default class StateManager {
         });
     }
 
-    // СОХРАНЕНИЕ С ВАЛИДАЦИЕЙ И СЖАТИЕМ
+    // СОХРАНЕНИЕ С ВАЛИДАЦИЕЙ И СЖАТИЕМ (ОБНОВЛЕННОЕ)
     saveState(content, cursorPosition, selections = [], metadata = {}) {
         try {
             const state = {
@@ -41,6 +41,7 @@ export default class StateManager {
                 metadata: {
                     contentLength: content ? content.length : 0,
                     lines: content ? content.split('\n').length : 0,
+                    selectionsCount: selections ? selections.length : 0,
                     ...metadata
                 }
             };
@@ -66,6 +67,7 @@ export default class StateManager {
                 contentLength: state.metadata.contentLength,
                 lines: state.metadata.lines,
                 cursor: state.cursor,
+                selections: state.selections.length,
                 size: stateSize
             });
             
@@ -79,7 +81,7 @@ export default class StateManager {
         }
     }
 
-    // ЗАГРУЗКА С ПРОВЕРКОЙ ЦЕЛОСТНОСТИ
+    // ЗАГРУЗКА С ПРОВЕРКОЙ ЦЕЛОСТНОСТИ (БЕЗ ИЗМЕНЕНИЙ)
     loadState() {
         try {
             const saved = localStorage.getItem(this.stateKey);
@@ -120,6 +122,7 @@ export default class StateManager {
             this.log.debug('Состояние загружено', {
                 contentLength: state.metadata?.contentLength || 0,
                 lines: state.metadata?.lines || 0,
+                selections: state.selections?.length || 0,
                 age: this.formatAge(age)
             });
 
@@ -128,6 +131,56 @@ export default class StateManager {
             this.log.error('Ошибка загрузки состояния', { error: error.message });
             this.clearState();
             return null;
+        }
+    }
+
+    // ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ В РЕДАКТОР
+    restoreToEditor(editor, state) {
+        if (!editor || !state) {
+            this.log.debug('Нет состояния для восстановления');
+            return false;
+        }
+
+        try {
+            // ВОССТАНАВЛИВАЕМ СОДЕРЖИМОЕ
+            if (state.content && editor.setValue) {
+                editor.setValue(state.content, 1);
+            }
+
+            // ВОССТАНАВЛИВАЕМ КУРСОР
+            if (state.cursor) {
+                if (editor.moveCursorToPosition) {
+                    editor.moveCursorToPosition(state.cursor);
+                } else if (editor.moveCursorTo) {
+                    editor.moveCursorTo(state.cursor.row, state.cursor.column);
+                }
+            }
+
+            // ВОССТАНАВЛИВАЕМ ВЫДЕЛЕНИЯ
+            if (state.selections && state.selections.length > 0) {
+                if (editor.restoreSelections) {
+                    // Используем новый метод из AceEditor
+                    editor.restoreSelections(state.selections);
+                } else if (editor.selection && editor.selection.setSelectionRange) {
+                    state.selections.forEach(selection => {
+                        editor.selection.setSelectionRange(selection);
+                    });
+                }
+            }
+
+            this.log.info('Состояние восстановлено в редактор', {
+                contentLength: state.metadata?.contentLength || 0,
+                hasCursor: !!state.cursor,
+                hasSelections: !!(state.selections && state.selections.length),
+                selectionsCount: state.selections?.length || 0
+            });
+
+            return true;
+        } catch (error) {
+            this.log.error('Ошибка восстановления состояния в редактор', { 
+                error: error.message 
+            });
+            return false;
         }
     }
 
@@ -145,8 +198,10 @@ export default class StateManager {
             if (!editor.getValue) return;
             
             const content = editor.getValue();
+            
+            // ИСПОЛЬЗУЕМ НОВЫЕ МЕТОДЫ ИЗ AceEditor
             const cursor = editor.getCursorPosition ? editor.getCursorPosition() : { row: 0, column: 0 };
-            const selections = editor.selection?.getAllRanges ? editor.selection.getAllRanges() : [];
+            const selections = editor.getSelections ? editor.getSelections() : [];
             
             const metadata = {
                 sessionId: this.stateId,
@@ -176,7 +231,11 @@ export default class StateManager {
             editor.selection.on('changeCursor', cursorHandler);
         }
 
-        this.log.debug('Автосохранение настроено', { delay: saveDelay });
+        this.log.debug('Автосохранение настроено', { 
+            delay: saveDelay,
+            hasGetSelections: !!editor.getSelections,
+            hasGetCursorPosition: !!editor.getCursorPosition
+        });
 
         // ФУНКЦИЯ ОЧИСТКИ
         this.autoSaveCleanup = () => {
@@ -192,43 +251,39 @@ export default class StateManager {
         return this.autoSaveCleanup;
     }
 
-    // ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ В РЕДАКТОР
-    restoreToEditor(editor, state) {
-        if (!editor || !state) {
-            this.log.debug('Нет состояния для восстановления');
-            return false;
-        }
+    //Проверка совместимости с редактором
+    checkEditorCompatibility(editor) {
+        return {
+            hasGetCursorPosition: !!editor.getCursorPosition,
+            hasGetSelections: !!editor.getSelections,
+            hasMoveCursorToPosition: !!editor.moveCursorToPosition,
+            hasRestoreSelections: !!editor.restoreSelections,
+            hasSetValue: !!editor.setValue,
+            hasGetValue: !!editor.getValue
+        };
+    }
 
+    //Получение состояния из редактора
+    getStateFromEditor(editor) {
+        if (!editor) return null;
+        
         try {
-            // ВОССТАНАВЛИВАЕМ СОДЕРЖИМОЕ
-            if (state.content && editor.setValue) {
-                editor.setValue(state.content, 1); // cursorPosition = 1
-            }
-
-            // ВОССТАНАВЛИВАЕМ КУРСОР
-            if (state.cursor && editor.moveCursorTo) {
-                editor.moveCursorTo(state.cursor.row, state.cursor.column);
-            }
-
-            // ВОССТАНАВЛИВАЕМ ВЫДЕЛЕНИЯ
-            if (state.selections && editor.selection && editor.selection.setSelectionRange) {
-                state.selections.forEach(selection => {
-                    editor.selection.setSelectionRange(selection);
-                });
-            }
-
-            this.log.info('Состояние восстановлено в редактор', {
-                contentLength: state.metadata?.contentLength || 0,
-                hasCursor: !!state.cursor,
-                hasSelections: !!(state.selections && state.selections.length)
-            });
-
-            return true;
+            const content = editor.getValue ? editor.getValue() : '';
+            const cursor = editor.getCursorPosition ? editor.getCursorPosition() : { row: 0, column: 0 };
+            const selections = editor.getSelections ? editor.getSelections() : [];
+            
+            return {
+                content,
+                cursor,
+                selections,
+                timestamp: Date.now(),
+                version: this.config.version
+            };
         } catch (error) {
-            this.log.error('Ошибка восстановления состояния в редактор', { 
+            this.log.error('Ошибка получения состояния из редактора', { 
                 error: error.message 
             });
-            return false;
+            return null;
         }
     }
 
@@ -271,6 +326,7 @@ export default class StateManager {
             age: this.formatAge(state.timestamp),
             contentLength: state.metadata?.contentLength || 0,
             lines: state.metadata?.lines || 0,
+            selectionsCount: state.selections?.length || 0,
             timestamp: formatTimestamp(state.timestamp),
             version: state.version,
             truncated: state.metadata?.truncated || false

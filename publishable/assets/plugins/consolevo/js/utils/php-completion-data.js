@@ -195,10 +195,8 @@ export class DynamicEvoCompletion {
         if (this.isAnalyzed) return;
 
         try {
-            console.log('Загрузка данных Evolution CMS для автодополнения...');
             this.analysis = await analyzeEvolutionCMS();
             this.isAnalyzed = true;
-            console.log('Данные Evolution CMS загружены успешно');
         } catch (error) {
             console.error('Ошибка загрузки данных Evolution CMS:', error);
             // Возвращаем данные по умолчанию

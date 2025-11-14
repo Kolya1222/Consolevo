@@ -7,5 +7,12 @@ $modx = evo();
 
 Event::listen(['evolution.OnManagerTreePrerender'], function() use ($modx) {
     if (evo()->getLoginUserID('mgr') != 1) return;
-    echo view('consolevo::tree-button')->render();
+    
+    // Получаем значение конфига
+    $useModxPopup = config('consolevo.use_modx_popup', 1);
+    
+    // Передаем конфиг в шаблон
+    echo view('consolevo::tree-button', [
+        'useModxPopup' => $useModxPopup
+    ])->render();
 });

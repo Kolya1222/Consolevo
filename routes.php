@@ -4,8 +4,13 @@ use roilafx\Consolevo\Controllers\ConsoleController;
 use roilafx\Consolevo\Controllers\PhpConsoleController;
 use roilafx\Consolevo\Controllers\SqlConsoleController;
 use roilafx\Consolevo\Controllers\AnalysisController;
+use roilafx\Consolevo\Middleware\ConsoleVoAccess;
+use EvolutionCMS\Middleware\VerifyCsrfToken;
 
-Route::prefix('consolevo')->group(function () {
+Route::prefix('consolevo')->middleware([
+    VerifyCsrfToken::class,
+    ConsoleVoAccess::class
+])->group(function () {
     // Главная страница
     Route::get('/', [ConsoleController::class, 'index'])->name('consolevo.index');
     
@@ -19,6 +24,7 @@ Route::prefix('consolevo')->group(function () {
     Route::get('/sql/tables', [SqlConsoleController::class, 'getTablesForAutocomplete']);
     Route::get('/sql/database-info', [SqlConsoleController::class, 'getDatabaseInfo']);
 
+    // Подсказки для PHP
     Route::get('/analysis/evo-data', [AnalysisController::class, 'getEvoCompletionData']);
     Route::get('/analysis/static-data', [AnalysisController::class, 'getStaticCompletionData']);
 });

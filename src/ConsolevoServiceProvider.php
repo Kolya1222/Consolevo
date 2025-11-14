@@ -12,6 +12,17 @@ class ConsolevoServiceProvider extends ServiceProvider
         $this->loadPluginsFrom(
             dirname(__DIR__) . '/plugins/'
         );
+        
+        $configPath = MODX_BASE_PATH . 'assets/plugins/consolevo/big_config/consolevo.php';
+        if (file_exists($configPath)) {
+            $this->mergeConfigFrom($configPath, 'consolevo');
+        } else {
+            // Fallback конфиг из пакета
+            $this->mergeConfigFrom(
+                __DIR__ . '/../publishable/assets/plugins/consolevo/big_config/consolevo.php', 
+                'consolevo'
+            );
+        }
     }
 
     public function boot()

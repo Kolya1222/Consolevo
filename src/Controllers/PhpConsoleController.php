@@ -8,27 +8,11 @@ class PhpConsoleController
 {
     public function index()
     {
-        // Проверяем права администратора
-        if (!$this->isManager()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Доступ запрещен. Только для администраторов.'
-            ], 403);
-        }
-        
         return view('consolevo::php-console');
     }
 
     public function execute(Request $request): JsonResponse
     {
-        // Проверяем права администратора
-        if (!$this->isManager()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Доступ запрещен. Только для администраторов.'
-            ], 403);
-        }
-        
         $code = $request->input('code');
         
         if (empty($code)) {
@@ -56,14 +40,6 @@ class PhpConsoleController
                 'line' => $e->getLine()
             ], 500);
         }
-    }
-
-    /**
-     * Проверяем что пользователь - менеджер
-     */
-    private function isManager(): bool
-    {
-        return evolutionCMS()->getLoginUserType() === 'manager';
     }
 
     /**
@@ -167,9 +143,9 @@ class PhpConsoleController
             'db' => $evo->getDatabase(),
         ];
         
-        // Ограничения для безопасности (но не слишком строгие)
-        set_time_limit(30); // 30 секунд вместо 5
-        ini_set('memory_limit', '256M'); // 256MB вместо 128MB
+        // Ограничения для безопасности
+        set_time_limit(30); // 30 секунд
+        ini_set('memory_limit', '256M'); // 256MB
         
         // Извлекаем переменные в текущую область видимости
         extract($context, EXTR_SKIP);

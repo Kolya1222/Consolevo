@@ -51,7 +51,6 @@
             min-height: 100vh;
             padding: 20px;
             line-height: 1.6;
-            font-family: cursive;
         }
 
         /* Анимации */

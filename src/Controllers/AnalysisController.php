@@ -51,59 +51,6 @@ class AnalysisController
         ]);
     }
 
-    public function searchCompletion($query)
-    {
-        $data = $this->getStaticAnalysisData();
-        $results = [
-            'methods' => [],
-            'properties' => [],
-            'constants' => [],
-            'functions' => []
-        ];
-        
-        if (!empty($query)) {
-            $query = strtolower($query);
-            
-            // Поиск по методам
-            foreach (($data['methods'] ?? []) as $method) {
-                $methodName = is_array($method) ? ($method['name'] ?? '') : $method;
-                if (strpos(strtolower($methodName), $query) !== false) {
-                    $results['methods'][] = $method;
-                }
-            }
-            
-            // Поиск по свойствам
-            foreach (($data['properties'] ?? []) as $property) {
-                if (strpos(strtolower($property), $query) !== false) {
-                    $results['properties'][] = $property;
-                }
-            }
-            
-            // Поиск по константам
-            foreach (($data['constants'] ?? []) as $constant) {
-                if (strpos(strtolower($constant), $query) !== false) {
-                    $results['constants'][] = $constant;
-                }
-            }
-            
-            // Поиск по функциям
-            foreach (($data['functions'] ?? []) as $function) {
-                $functionName = is_array($function) ? ($function['name'] ?? '') : $function;
-                if (strpos(strtolower($functionName), $query) !== false) {
-                    $results['functions'][] = $function;
-                }
-            }
-        }
-        
-        return response()->json([
-            'success' => true,
-            'query' => $query,
-            'results' => $results,
-            'total' => count($results['methods']) + count($results['properties']) + 
-                      count($results['constants']) + count($results['functions'])
-        ]);
-    }
-
     /**
      * Гарантирует, что все поля данных являются массивами
      */

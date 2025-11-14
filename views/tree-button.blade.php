@@ -18,9 +18,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function openConsole() {
         const consoleUrl = '{{ evo()->make("url")->to("consolevo") }}';
+        const useModxPopup = {{ $useModxPopup ?? 1 }}; // Получаем значение из конфига
         
-        // Используем modx.popup если доступен, иначе fallback
-        if (typeof window.modx !== 'undefined' && typeof window.modx.popup === 'function') {
+        // Используем modx.popup если доступен И разрешен в конфиге, иначе fallback
+        if (useModxPopup && typeof window.modx !== 'undefined' && typeof window.modx.popup === 'function') {
             window.modx.popup({
                 url: consoleUrl,
                 icon: 'fa-terminal',
@@ -35,7 +36,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 minheight: 600
             });
         } else {
-            // Fallback для случая когда modx.popup недоступен
             const width = 1200;
             const height = 800;
             const left = (screen.width - width) / 2;
