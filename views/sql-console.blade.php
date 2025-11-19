@@ -3,7 +3,7 @@
 @section('title', 'SQL Console - Evolution Console')
 
 @section('styles')
-    <link rel="stylesheet" href="{{ MODX_BASE_URL }}assets/plugins/consolevo/css/php-sql-console.css?v={{ time() }}">
+    <link rel="stylesheet" href="{{ MODX_BASE_URL }}assets/plugins/consolevo/css/php-sql-console.css">
 @endsection
 
 @section('content')
@@ -67,5 +67,5 @@
 <script src="{{ MODX_BASE_URL }}assets/plugins/consolevo/ace-editor/theme-chrome.js"></script>
 
 
-<script type="module" src="{{ MODX_BASE_URL }}assets/plugins/consolevo/js/console.js?v={{ time() }}"></script>
+<script type="module" src="{{ MODX_BASE_URL }}assets/plugins/consolevo/js/console.js"></script>
 @endsection

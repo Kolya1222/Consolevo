@@ -96,7 +96,7 @@ export default class ConsoleManager {
             await this.setupModules();
             this.setupEventListeners();
             this.loadAndApplyPreferences();
-            await this.restoreEditorState(); // ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ
+            await this.restoreEditorState();
             
             this.log.info('ConsoleManager успешно инициализирован');
         } catch (error) {
@@ -133,6 +133,8 @@ export default class ConsoleManager {
         this.clearOutput = () => this.modules.output?.clear();
         this.getOutputStats = () => this.modules.output?.getStats() || {};
         this.highlightOutput = (pattern, className) => this.modules.output?.highlightLines(pattern, className);
+        
+        this.addSmart = (content, type = 'info') => this.modules.output?.addSmart(content, type);
 
         // HISTORY MANAGER ПРОКСИ-МЕТОДЫ
         this.clearHistory = () => this.modules.history?.clear();
@@ -140,7 +142,7 @@ export default class ConsoleManager {
         this.getHistoryStats = () => this.modules.history?.getStats() || {};
         this.searchHistory = (pattern) => this.modules.history?.search(pattern) || [];
 
-        // STATE MANAGER ПРОКСИ-МЕТОДЫ (ОБНОВЛЕННЫЕ)
+        // STATE MANAGER ПРОКСИ-МЕТОДЫ
         this.saveEditorState = () => {
             if (!this.modules.state || !this.modules.editor) return false;
             
@@ -468,7 +470,7 @@ export default class ConsoleManager {
             const fontSizeString = fontSize + 'px';
             this.domElements.fontSizeSelector.value = fontSizeString;
         } else {
-            console.error('❌ fontSizeSelector не найден!');
+            console.error('fontSizeSelector не найден!');
         }
         this.log.debug('Размер шрифта изменен', { fontSize });
     }
@@ -778,6 +780,13 @@ export default class ConsoleManager {
      * @param {Object} result - Результат выполнения
      */
     handleExecutionResult(result) {
+        // ОБРАБОТКА HTML ОШИБОК EVOLUTION CMS
+        if (result.isHtmlError) {
+            this.log.warn('Обработка HTML ошибки Evolution CMS');
+            this.addSmart(result.output, 'error');
+            return;
+        }
+        
         if (result && result.success) {
             this.log.info('Код выполнен успешно', { 
                 executionTime: result.execution_time,
@@ -797,7 +806,6 @@ export default class ConsoleManager {
                 error: errorMessage,
                 line: result?.line 
             });
-            
             this.addError(errorMessage, 'Выполнение кода');
             
             if (result?.line && this.modules.editor) {
@@ -829,13 +837,37 @@ export default class ConsoleManager {
     }
 
     /**
-     * Экспортирует данные
+     * Экспортирует данные истории
      */
     exportData() {
-        this.log.info('Экспорт данных');
-        if (this.modules.history) {
+        this.log.info('Экспорт данных истории');
+        
+        if (!this.modules.history) {
+            this.addError('Модуль истории не доступен');
+            return;
+        }
+
+        try {
             const historyData = this.exportHistory();
-            this.addSuccess('История экспортирована (см. консоль разработчика)');
+            
+            // Создаем JSON файл для скачивания
+            const dataStr = JSON.stringify(historyData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `console-history-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            this.addSuccess(`История экспортирована (${historyData.length} записей)`);
+            
+        } catch (error) {
+            this.log.error('Ошибка экспорта данных', { error: error.message });
+            this.addError('Ошибка экспорта истории');
         }
     }
 

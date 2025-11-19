@@ -1177,3 +1177,179 @@
     line-height: 1.3;
 }
 
+/* Стили для ошибок Evolution CMS */
+.evolution-error-container {
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 12px 0;
+    background: rgba(220, 53, 69, 0.1);
+    backdrop-filter: blur(20px);
+    border-left: 4px solid var(--danger);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.error-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+.error-icon {
+    font-size: 20px;
+    margin-right: 10px;
+    color: var(--danger);
+}
+
+.error-title {
+    margin: 0;
+    color: var(--danger);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.error-message {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    margin: 8px 0;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.9rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.error-section {
+    margin: 12px 0;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+}
+
+.error-section h4 {
+    margin: 0 0 8px 0;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.benchmarks-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.benchmarks-list dt {
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+.benchmarks-list dd {
+    margin: 0;
+    font-family: monospace;
+    color: var(--text);
+}
+
+.backtrace-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.8rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.backtrace-item {
+    margin: 4px 0;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--text-secondary);
+    cursor: help;
+    transition: var(--transition-fast);
+    border: 1px solid transparent;
+}
+
+.backtrace-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    border-color: var(--glass-border);
+}
+
+.sql-error {
+    background: rgba(255, 193, 7, 0.1);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--warning);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    font-size: 0.85rem;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .evolution-error-container {
+        padding: 12px;
+        margin: 8px 0;
+    }
+    
+    .error-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .error-message {
+        font-size: 0.8rem;
+        padding: 8px;
+    }
+    
+    .benchmarks-list {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+    
+    .backtrace-list {
+        max-height: 150px;
+    }
+}
+
+/* Улучшенные анимации */
+@keyframes slideInError {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.evolution-error-container {
+    animation: slideInError 0.4s ease-out;
+}
+
+/* Стили для разных типов ошибок */
+.evolution-error-container.sql-error {
+    border-left-color: var(--warning);
+    background: rgba(255, 193, 7, 0.05);
+}
+
+.evolution-error-container.syntax-error {
+    border-left-color: var(--danger);
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.evolution-error-container.runtime-error {
+    border-left-color: var(--info);
+    background: rgba(23, 162, 184, 0.1);
+}

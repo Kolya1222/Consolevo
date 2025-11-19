@@ -135,7 +135,6 @@ export default class ApiClient {
             
             const duration = performance.now() - startTime;
             
-            // ЛОГГИРОВАНИЕ УСПЕШНОГО ЗАПРОСА
             this.logRequest({
                 requestId,
                 type: this.consoleType,
@@ -148,6 +147,35 @@ export default class ApiClient {
             
         } catch (error) {
             const duration = performance.now() - startTime;
+            
+            // ОБРАБОТКА HTML ОШИБОК EVOLUTION CMS
+            if (error.isHtmlError) {
+                this.log.warn('Возвращаем HTML ошибку как результат', { 
+                    requestId,
+                    htmlLength: error.htmlContent?.length 
+                });
+                
+                // Создаем структурированный ответ с HTML ошибкой
+                const htmlErrorResult = {
+                    success: false,
+                    output: error.htmlContent,
+                    error: 'Evolution CMS Error',
+                    execution_time: duration / 1000,
+                    memory_usage: 0,
+                    isHtmlError: true
+                };
+                
+                this.logRequest({
+                    requestId,
+                    type: this.consoleType,
+                    success: false,
+                    duration,
+                    error: 'Evolution CMS HTML Error',
+                    attempts: error.attempts || 1
+                });
+
+                return htmlErrorResult;
+            }
             
             this.logRequest({
                 requestId,
@@ -247,6 +275,15 @@ export default class ApiClient {
                 lastError = error;
                 lastError.attempts = attempts;
                 
+                // ОБРАБОТКА HTML ОШИБОК - НЕ ПОВТОРЯЕМ ЗАПРОС
+                if (error.isHtmlError) {
+                    this.log.warn('HTML ошибка Evolution CMS - пропускаем повторные попытки', { 
+                        requestId,
+                        status: error.status
+                    });
+                    throw error;
+                }
+                
                 if (error.name === 'AbortError') {
                     this.log.warn('Таймаут запроса', { requestId, attempt, timeout });
                     throw new Error(`Таймаут запроса (${timeout}ms)`);
@@ -277,6 +314,22 @@ export default class ApiClient {
         
         try {
             const errorData = await response.text();
+            
+            // ОБРАБОТКА HTML ОШИБОК EVOLUTION CMS
+            if (errorData.includes('Evolution CMS') || errorData.includes('<!DOCTYPE html>')) {
+                this.log.warn('Обнаружена HTML ошибка Evolution CMS', { 
+                    status: response.status,
+                    contentType: response.headers.get('content-type')
+                });
+                
+                // Создаем специальную ошибку с HTML содержимым
+                const htmlError = new Error('Evolution CMS HTML Error');
+                htmlError.htmlContent = errorData;
+                htmlError.isHtmlError = true;
+                htmlError.status = response.status;
+                throw htmlError;
+            }
+            
             if (errorData) {
                 const parsedError = safeJsonParse(errorData, null);
                 if (parsedError && parsedError.error) {
@@ -286,6 +339,10 @@ export default class ApiClient {
                 }
             }
         } catch (parseError) {
+            // Если это HTML ошибка - пробрасываем её дальше
+            if (parseError.isHtmlError) {
+                throw parseError;
+            }
             // Используем стандартное сообщение если парсинг не удался
         }
         

@@ -8,6 +8,7 @@ import {
     logger,
     debounce,
     isEmpty,
+    parseEvolutionError
 } from '../utils/helpers.js';
 
 /**
@@ -201,6 +202,192 @@ export default class OutputManager {
     }
 
     /**
+     * Определяет тип контента и обрабатывает соответствующим образом
+     * @param {string} content - Контент для анализа
+     * @returns {Object} Информация о типе контента
+     */
+    analyzeContentType(content) {
+        const analysis = {
+            isHtml: false,
+            isEvolutionError: false,
+            isSqlError: false,
+            contentType: 'text'
+        };
+        
+        // Проверяем на HTML
+        if (/<[a-z][\s\S]*>/i.test(content)) {
+            analysis.isHtml = true;
+            
+            // Проверяем на ошибку Evolution CMS
+            if (content.includes('Evolution CMS Parse Error') || 
+                content.includes('Evolution CMS Content Manager') ||
+                content.includes('SQLSTATE[')) {
+                analysis.isEvolutionError = true;
+                analysis.contentType = 'evolution-error';
+            }
+            
+            // Проверяем на SQL ошибку
+            if (content.includes('SQLSTATE') || content.includes('You have an error in your SQL syntax')) {
+                analysis.isSqlError = true;
+            }
+        }
+        
+        return analysis;
+    }
+    
+    /**
+     * Обрабатывает вывод с автоматическим определением типа контента
+     * @param {string} content - Контент для вывода
+     * @param {string} [type='info'] - Базовый тип сообщения
+     * @returns {void}
+     */
+    addSmart(content, type = 'info') {
+        const analysis = this.analyzeContentType(content);
+        
+        if (analysis.isEvolutionError) {
+            this.handleEvolutionError(content);
+        } else if (analysis.isHtml) {
+            this.addHtmlContent(content, type);
+        } else {
+            this.add(content, type);
+        }
+    }
+    
+    /**
+     * Обрабатывает HTML ошибки Evolution CMS
+     * @param {string} html - HTML ошибка
+     * @returns {void}
+     */
+    handleEvolutionError(html) {
+        try {
+            // Парсим ошибку
+            const errorInfo = parseEvolutionError(html);
+            
+            // Создаем контейнер для ошибки
+            const errorContainer = createElement('div', 'evolution-error-container fade-in');
+            errorContainer.setAttribute('data-error-type', 'evolution-cms');
+            errorContainer.setAttribute('data-timestamp', errorInfo.timestamp);
+            
+            // Заголовок ошибки
+            const header = createElement('div', 'error-header');
+            const icon = createElement('span', 'error-icon');
+            const title = createElement('h3', 'error-title', errorInfo.title);
+            header.appendChild(icon);
+            header.appendChild(title);
+            errorContainer.appendChild(header);
+            
+            // Основное сообщение
+            if (errorInfo.message) {
+                const message = createElement('div', 'error-message', errorInfo.message);
+                errorContainer.appendChild(message);
+            }
+            
+            // SQL ошибка
+            if (errorInfo.sqlError) {
+                const sqlContainer = createElement('div', 'error-section');
+                const sqlLabel = createElement('strong', '', 'SQL Error: ');
+                const sqlText = createElement('code', 'sql-error', errorInfo.sqlError);
+                sqlContainer.appendChild(sqlLabel);
+                sqlContainer.appendChild(sqlText);
+                errorContainer.appendChild(sqlContainer);
+            }
+            
+            // Бенчмарки
+            if (errorInfo.benchmarks && Object.keys(errorInfo.benchmarks).length > 0) {
+                const benchmarksSection = this.createBenchmarksSection(errorInfo.benchmarks);
+                errorContainer.appendChild(benchmarksSection);
+            }
+            
+            // Backtrace
+            if (errorInfo.backtrace && errorInfo.backtrace.length > 0) {
+                const backtraceSection = this.createBacktraceSection(errorInfo.backtrace);
+                errorContainer.appendChild(backtraceSection);
+            }
+            
+            this.outputElement.appendChild(errorContainer);
+            this.currentLines++;
+            this.scrollToBottom();
+            
+            this.log.error('Evolution CMS Error processed', {
+                title: errorInfo.title,
+                hasSqlError: !!errorInfo.sqlError,
+                backtraceLength: errorInfo.backtrace?.length || 0
+            });
+            
+        } catch (error) {
+            this.log.error('Error processing Evolution error', { error: error.message });
+            this.add(`Ошибка обработки HTML ошибки: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Создает секцию с бенчмарками
+     * @param {Object} benchmarks - Объект с бенчмарками
+     * @returns {HTMLElement} DOM элемент секции
+     */
+    createBenchmarksSection(benchmarks) {
+        const section = createElement('div', 'error-section');
+        const title = createElement('h4', '', 'Benchmarks');
+        section.appendChild(title);
+        
+        const list = createElement('dl', 'benchmarks-list');
+        Object.entries(benchmarks).forEach(([key, value]) => {
+            const dt = createElement('dt', '', key);
+            const dd = createElement('dd', '', value);
+            list.appendChild(dt);
+            list.appendChild(dd);
+        });
+        
+        section.appendChild(list);
+        return section;
+    }
+    
+    /**
+     * Создает секцию с backtrace
+     * @param {Array} backtrace - Массив строк backtrace
+     * @returns {HTMLElement} DOM элемент секции
+     */
+    createBacktraceSection(backtrace) {
+        const section = createElement('div', 'error-section');
+        const title = createElement('h4', '', 'Backtrace');
+        section.appendChild(title);
+        
+        const list = createElement('ol', 'backtrace-list');
+        backtrace.slice(0, 8).forEach((trace, index) => {
+            const li = createElement('li', 'backtrace-item');
+            
+            // Упрощаем backtrace для читаемости
+            const simplifiedTrace = trace
+                .replace(/<strong>.*?<\/strong>/g, '') // Убираем strong теги
+                .replace(/\(.*?\) on line \d+/, '') // Упрощаем информацию о файле
+                .substring(0, 150); // Ограничиваем длину
+            
+            li.textContent = simplifiedTrace + (trace.length > 150 ? '...' : '');
+            li.setAttribute('title', trace); // Полный текст в tooltip
+            
+            list.appendChild(li);
+        });
+        
+        section.appendChild(list);
+        return section;
+    }
+    
+    /**
+     * Обрабатывает обычный HTML контент (не ошибки)
+     * @param {string} html - HTML контент
+     * @param {string} type - Тип сообщения
+     * @returns {void}
+     */
+    addHtmlContent(html, type) {
+        const container = createElement('div', 'html-content-container');
+        container.innerHTML = sanitizeHtml(html); // Используем санитизацию для безопасности
+        
+        this.outputElement.appendChild(container);
+        this.currentLines++;
+        this.scrollToBottom();
+    }
+
+    /**
      * Обрабатывает успешный результат выполнения кода
      * @param {Object} data - Данные результата
      * @param {string} consoleType - Тип консоли
@@ -235,8 +422,7 @@ export default class OutputManager {
         let hasOutput = false;
 
         if (!isEmpty(data.output) && data.output !== 'Код выполнен успешно') {
-            const hasHtml = /<[a-z][\s\S]*>/i.test(data.output);
-            this.add(data.output, 'success', hasHtml);
+            this.addSmart(data.output, 'success');
             hasOutput = true;
         }
         
@@ -450,7 +636,7 @@ export default class OutputManager {
      */
     addError(error, context = '') {
         const message = context ? `${context}: ${error}` : error;
-        this.add(message, 'error');
+        this.addSmart(message, 'error');
     }
 
     /**

@@ -224,3 +224,87 @@ export function escapeSqlIdentifier(identifier) {
     if (!identifier) return '';
     return '`' + identifier.replace(/`/g, '``') + '`';
 }
+
+/**
+ * Безопасно парсит HTML ошибки Evolution CMS и извлекает информацию
+ * @param {string} html - HTML строка с ошибкой
+ * @returns {Object} Структурированная информация об ошибке
+ */
+export function parseEvolutionError(html) {
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Извлекаем основную информацию об ошибке
+        const errorTitle = doc.querySelector('h2')?.textContent?.trim() || 'Evolution CMS Error';
+        const errorMessage = doc.querySelector('h3')?.textContent?.trim() || 'Unknown error';
+        
+        // Извлекаем SQL ошибку
+        let sqlError = null;
+        const sqlMatch = errorMessage.match(/SQLSTATE\[.*?\]:\s*(.*?)(?:<br>|$)/);
+        if (sqlMatch) {
+            sqlError = sqlMatch[1].trim();
+        }
+        
+        // Извлекаем бенчмарки
+        const benchmarks = {};
+        const benchmarkTables = doc.querySelectorAll('table.grid');
+        if (benchmarkTables.length >= 2) {
+            const benchmarkTable = benchmarkTables[benchmarkTables.length - 1];
+            benchmarkTable.querySelectorAll('tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 2) {
+                    const key = cells[0].textContent.trim();
+                    const value = cells[1].textContent.trim();
+                    benchmarks[key] = value;
+                }
+            });
+        }
+        
+        // Извлекаем backtrace
+        const backtrace = [];
+        const backtraceTable = doc.querySelector('table.grid:last-of-type');
+        if (backtraceTable) {
+            backtraceTable.querySelectorAll('tr').forEach(row => {
+                const trace = row.querySelector('td')?.textContent?.trim();
+                if (trace && !trace.includes('Backtrace')) {
+                    backtrace.push(trace);
+                }
+            });
+        }
+        
+        // Извлекаем информацию о запросе
+        const requestInfo = {};
+        const requestTables = doc.querySelectorAll('table.grid');
+        if (requestTables.length > 0) {
+            requestTables[0].querySelectorAll('tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 2) {
+                    const key = cells[0].textContent.trim();
+                    const value = cells[1].textContent.trim();
+                    requestInfo[key] = value;
+                }
+            });
+        }
+        
+        return {
+            title: errorTitle,
+            message: errorMessage,
+            sqlError: sqlError,
+            benchmarks: benchmarks,
+            backtrace: backtrace.slice(0, 10), // Ограничиваем backtrace
+            requestInfo: requestInfo,
+            rawHtml: html, // Сохраняем оригинал для дебага
+            timestamp: new Date().toISOString()
+        };
+        
+    } catch (error) {
+        // Если парсинг не удался, возвращаем базовую информацию
+        return {
+            title: 'HTML Parse Error',
+            message: 'Не удалось распарсить HTML ошибку',
+            rawHtml: html.substring(0, 500) + '...',
+            timestamp: new Date().toISOString()
+        };
+    }
+}
