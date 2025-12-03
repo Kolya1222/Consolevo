@@ -4,7 +4,7 @@ namespace roilafx\Consolevo\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 
-class ConsoleVoAccess
+class ConsolevoAccess
 {
     public function handle(Request $request, Closure $next)
     {

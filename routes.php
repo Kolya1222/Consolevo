@@ -4,12 +4,12 @@ use roilafx\Consolevo\Controllers\ConsoleController;
 use roilafx\Consolevo\Controllers\PhpConsoleController;
 use roilafx\Consolevo\Controllers\SqlConsoleController;
 use roilafx\Consolevo\Controllers\AnalysisController;
-use roilafx\Consolevo\Middleware\ConsoleVoAccess;
+use roilafx\Consolevo\Middleware\ConsolevoAccess;
 use EvolutionCMS\Middleware\VerifyCsrfToken;
 
 Route::prefix('consolevo')->middleware([
     VerifyCsrfToken::class,
-    ConsoleVoAccess::class
+    ConsolevoAccess::class
 ])->group(function () {
     // Главная страница
     Route::get('/', [ConsoleController::class, 'index'])->name('consolevo.index');
