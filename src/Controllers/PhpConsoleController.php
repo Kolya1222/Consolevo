@@ -43,46 +43,40 @@ class PhpConsoleController
     }
 
     /**
-     * Выполнение кода с правами менеджера (минимальные ограничения)
+     * Выполнение кода с правами менеджера
      */
     private function executeAsManager(string $code): array
     {
         $startTime = microtime(true);
         $startMemory = memory_get_usage(true);
+        $normalizedCode = $this->normalizePhpCode($code);
+        if ($this->containsCriticalDanger($normalizedCode)) {
+            throw new \Exception('Обнаружен критически опасный код');
+        }
+        
+        ob_start();
+        $result = null;
         
         try {
-            // Нормализуем код
-            $normalizedCode = $this->normalizePhpCode($code);
-            
-            // Базовая проверка синтаксиса
-            $this->validatePhpSyntax($normalizedCode);
-            
-            // Проверяем только КРИТИЧЕСКИ опасные операции
-            if ($this->containsCriticalDanger($normalizedCode)) {
-                throw new \Exception('Обнаружен критически опасный код');
-            }
-            
-            ob_start();
-            
-            // Выполняем с доступом ко всем функциям Evolution CMS
             $result = $this->executeWithEvoAccess($normalizedCode);
-            $output = ob_get_clean();
-            
-            $executionTime = round(microtime(true) - $startTime, 4);
-            $memoryUsage = memory_get_usage(true) - $startMemory;
-            
-            return [
-                'output' => $output ?: 'Код выполнен успешно',
-                'result' => $this->formatResult($result),
-                'execution_time' => $executionTime,
-                'memory_usage' => $memoryUsage
-            ];
-            
         } catch (\ParseError $e) {
+            $output = ob_get_clean();
             throw new \Exception("Ошибка синтаксиса: " . $e->getMessage());
         } catch (\Throwable $e) {
+            $output = ob_get_clean();
             throw new \Exception("Ошибка выполнения: " . $e->getMessage());
         }
+        
+        $output = ob_get_clean();
+        $executionTime = round(microtime(true) - $startTime, 4);
+        $memoryUsage = memory_get_usage(true) - $startMemory;
+        
+        return [
+            'output' => $output ?: 'Код выполнен успешно',
+            'result' => $this->formatResult($result),
+            'execution_time' => $executionTime,
+            'memory_usage' => $memoryUsage
+        ];
     }
 
     /**
@@ -121,7 +115,6 @@ class PhpConsoleController
      */
     private function executeWithEvoAccess(string $code)
     {
-        // Получаем объекты Evolution CMS
         $evo = evolutionCMS();
         $modx = $evo;
 
@@ -160,29 +153,11 @@ class PhpConsoleController
     
     private function normalizePhpCode(string $code): string
     {
-        // Убираем все открывающие и закрывающие PHP теги
         $code = preg_replace('/^\s*<\?(?:php)?\s*/', '', $code);
         $code = preg_replace('/\?>\s*$/', '', $code);
         $code = preg_replace('/\?>\s*<\?(?:php)?\s*/', '', $code);
         
         return trim($code);
-    }
-    
-    private function validatePhpSyntax(string $code): void
-    {
-        if (empty($code)) return;
-        
-        $tempFile = tempnam(sys_get_temp_dir(), 'php_check_');
-        file_put_contents($tempFile, "<?php\n" . $code);
-        
-        $output = shell_exec("php -l " . escapeshellarg($tempFile) . " 2>&1");
-        unlink($tempFile);
-        
-        if (strpos($output, 'No syntax errors') === false) {
-            preg_match('/PHP\s+(?:Parse|Fatal) error:\s*(.+?)(?:\sin|$)/', $output, $matches);
-            $errorMessage = $matches[1] ?? 'Неизвестная синтаксическая ошибка';
-            throw new \ParseError(trim($errorMessage));
-        }
     }
     
     private function formatResult($result): string
