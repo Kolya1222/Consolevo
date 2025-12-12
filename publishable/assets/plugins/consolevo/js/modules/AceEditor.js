@@ -7,12 +7,7 @@ import {
     logger,
     getCsrfToken,
     debounce,
-    detectLanguage,
-    estimateComplexity,
     getLineCount,
-    countWords,
-    generateId,
-    isEmpty,
     throttle,
     escapeSqlIdentifier
 } from '../utils/helpers.js';
@@ -74,16 +69,13 @@ export default class AceEditor {
         this.stateManagerCallback = null;
         
         /** @type {Function} Обработчик изменений с дебаунсом */
-        this.changeHandler = debounce(this._onChange.bind(this), 500);
+        this.changeHandler = debounce(this._onChange.bind(this), 2000);
         
         /** @type {Function} Обработчик ресайза с троттлингом */
         this.resizeHandler = throttle(this.resize.bind(this), 100);
         
         /** @type {number} Счетчик изменений */
         this.changeCount = 0;
-        
-        /** @type {string} ID сессии */
-        this.sessionId = generateId('session_');
         
         /** @type {Map<string, Function>} Отслеживание событий для очистки */
         this._eventHandlers = new Map();
@@ -109,7 +101,6 @@ export default class AceEditor {
             this.applyBaseConfig();
             this.setInitialContent();
             
-            // ЗАГРУЗКА ТАБЛИЦ ПЕРЕД НАСТРОЙКОЙ АВТОДОПОЛНЕНИЯ
             if (this.consoleType === 'sql') {
                 await this.loadDatabaseTables();
             }
@@ -122,7 +113,6 @@ export default class AceEditor {
             
             this.log.info('Успешно инициализирован', { 
                 type: this.consoleType,
-                sessionId: this.sessionId,
                 theme: THEMES.default,
                 hasTables: this.databaseTables.length
             });
@@ -151,15 +141,12 @@ export default class AceEditor {
         if (!this.editor) return;
 
         this.editor.setOptions(EDITOR_CONFIG);
-        this.editor.setTheme(THEMES.default);
         this.editor.session.setMode(this.consoleType === 'php' ? MODES.php : MODES.sql);
         
         this.log.debug('Применена базовая конфигурация', {
             mode: this.consoleType === 'php' ? MODES.php : MODES.sql,
             theme: THEMES.default
         });
-        
-        // Дополнительные настройки для SQL
         if (this.consoleType === 'sql') {
             this.editor.session.setTabSize(2);
             this.editor.session.setUseSoftTabs(true);
@@ -277,7 +264,7 @@ export default class AceEditor {
             const response = await fetch('/consolevo/sql/tables', {
                 method: 'GET',
                 headers: headers,
-                credentials: 'include'  // ← Важно!
+                credentials: 'include'
             });
             
             if (!response.ok) {
@@ -762,16 +749,6 @@ export default class AceEditor {
      */
     _onChange() {
         if (!this.editor) return;
-
-        const content = this.getValue();
-        const stats = this.getCodeStats();
-        
-        // Логируем статистику каждые 10 изменений
-        if (this.changeCount % 10 === 0) {
-            this.log.debug('Статистика кода', stats);
-        }
-        
-        // ВЫЗОВ КОЛБЭКА STATE MANAGER вместо автосохранения
         if (this.stateManagerCallback) {
             this.stateManagerCallback();
         }
@@ -813,10 +790,10 @@ export default class AceEditor {
     }
 
     /**
-     * Изменение темы
-     * @param {string} themeName - Название темы
+     * Изменение темы редактора
+     * @param {string} themeName - Название темы Ace Editor (например, 'ace/theme/tomorrow_night')
      */
-    changeTheme(themeName) {
+    setTheme(themeName) {
         try {
             if (this.editor) {
                 this.editor.setTheme(themeName);
@@ -828,14 +805,6 @@ export default class AceEditor {
                 error: error.message 
             });
         }
-    }
-
-    /**
-     * Установка темы (алиас для changeTheme для совместимости с ThemeManager)
-     * @param {string} themeName - Название темы
-     */
-    setTheme(themeName) {
-        this.changeTheme(themeName);
     }
 
     /**
@@ -928,7 +897,10 @@ export default class AceEditor {
     applyPreferences(preferences) {
         if (!this.editor) return;
 
-        // Тему применяет ThemeManager, не дублируем
+        if (preferences.theme) {
+            this.setTheme(preferences.theme);
+        }
+
         if (preferences.fontSize) {
             this.changeFontSize(preferences.fontSize);
         }
@@ -991,30 +963,6 @@ export default class AceEditor {
     }
 
     /**
-     * Получение статистики кода
-     * @returns {object}
-     */
-    getCodeStats() {
-        const code = this.getValue();
-        return {
-            lines: getLineCount(code),
-            words: countWords(code),
-            complexity: estimateComplexity(code),
-            detectedLanguage: detectLanguage(code),
-            isEmpty: isEmpty(code)
-        };
-    }
-
-    /**
-     * Фокусировка на редакторе
-     */
-    focus() {
-        if (this.editor) {
-            this.editor.focus();
-        }
-    }
-
-    /**
      * Перерисовка редактора
      */
     resize() {
@@ -1022,14 +970,6 @@ export default class AceEditor {
             this.editor.resize();
             this.log.debug('Редактор перерисован');
         }
-    }
-
-    /**
-     * Получение сессии редактора
-     * @returns {object|null}
-     */
-    getSession() {
-        return this.editor ? this.editor.session : null;
     }
 
     /**
@@ -1060,23 +1000,7 @@ export default class AceEditor {
             this.editor = null;
             this.isInitialized = false;
             
-            this.log.info('Редактор уничтожен', { sessionId: this.sessionId });
+            this.log.info('Редактор уничтожен');
         }
-    }
-
-    /**
-     * Проверка инициализации редактора
-     * @returns {boolean}
-     */
-    isReady() {
-        return this.isInitialized && this.editor !== null;
-    }
-
-    /**
-     * Получение версии редактора
-     * @returns {string}
-     */
-    getVersion() {
-        return this.editor ? this.editor.getVersion() : 'Не инициализирован';
     }
 }

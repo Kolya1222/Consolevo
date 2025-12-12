@@ -142,10 +142,6 @@ export function isEmpty(value) {
     return false;
 }
 
-export function generateId(prefix = '') {
-    return `${prefix}${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
 // ПОИСК И ФИЛЬТРАЦИЯ
 export function filterByKeyword(items, keyword, fields = []) {
     if (!keyword) return items;

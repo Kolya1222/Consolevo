@@ -5,7 +5,6 @@ import {
     debounce,
     formatTimestamp,
     filterByKeyword,
-    generateId
 } from '../utils/helpers.js';
 
 export default class CommandHistory {
@@ -15,19 +14,13 @@ export default class CommandHistory {
         this.history = [];
         this.position = 0;
         this.tempCommand = ''; // ДЛЯ СОХРАНЕНИЯ ТЕКУЩЕЙ КОМАНДЫ
-        
-        // ИСПОЛЬЗУЕМ ЛОГГЕР ИЗ HELPERS
         this.log = logger('CommandHistory');
-        
-        // КОНФИГУРАЦИЯ
         this.config = {
             maxHistorySize: maxSize,
             storageKey: `consolevo_history_${consoleType}`,
             autoSaveDelay: 500,
             preserveCurrent: true
         };
-        
-        // ДЕБАУНС ДЛЯ АВТОСОХРАНЕНИЯ
         this.autoSave = debounce(() => this._save(), this.config.autoSaveDelay);
         
         this.load();
@@ -58,7 +51,6 @@ export default class CommandHistory {
         }
 
         const historyEntry = {
-            id: generateId('cmd_'),
             command: trimmedCommand,
             timestamp: Date.now(),
             consoleType: this.consoleType,

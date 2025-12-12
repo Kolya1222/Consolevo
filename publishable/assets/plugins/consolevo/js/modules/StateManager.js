@@ -1,10 +1,8 @@
 import { STATE_CONFIG } from '../utils/constants.js';
 import { 
     logger,
-    debounce,
     safeJsonParse,
     isEmpty,
-    generateId,
     formatTimestamp
 } from '../utils/helpers.js';
 
@@ -17,9 +15,6 @@ export default class StateManager {
         
         // КОНФИГУРАЦИЯ
         this.config = STATE_CONFIG;
-        
-        this.autoSaveCleanup = null;
-        this.stateId = generateId('state_');
         
         this.log.info('Инициализирован', { 
             type: consoleType,
@@ -36,7 +31,6 @@ export default class StateManager {
                 selections: selections || [],
                 timestamp: Date.now(),
                 version: this.config.version,
-                stateId: this.stateId,
                 consoleType: this.consoleType,
                 metadata: {
                     contentLength: content ? content.length : 0,
@@ -184,73 +178,6 @@ export default class StateManager {
         }
     }
 
-    // АВТОСОХРАНЕНИЕ С ДЕБАУНСОМ
-    createAutoSave(editor, delay = null) {
-        if (!editor) {
-            this.log.warn('Редактор не передан для автосохранения');
-            return null;
-        }
-
-        const saveDelay = delay || this.config.autoSaveDelay;
-        
-        // ИСПОЛЬЗУЕМ ДЕБАУНС ИЗ HELPERS
-        const autoSave = debounce(() => {
-            if (!editor.getValue) return;
-            
-            const content = editor.getValue();
-            
-            // ИСПОЛЬЗУЕМ НОВЫЕ МЕТОДЫ ИЗ AceEditor
-            const cursor = editor.getCursorPosition ? editor.getCursorPosition() : { row: 0, column: 0 };
-            const selections = editor.getSelections ? editor.getSelections() : [];
-            
-            const metadata = {
-                sessionId: this.stateId,
-                autoSaved: true
-            };
-            
-            this.saveState(content, cursor, selections, metadata);
-        }, saveDelay);
-
-        // ОБРАБОТЧИКИ СОБЫТИЙ
-        const changeHandler = () => {
-            if (editor.session && editor.session.getLength() > 0) {
-                autoSave();
-            }
-        };
-
-        const cursorHandler = () => {
-            autoSave();
-        };
-
-        // ПОДПИСКА НА СОБЫТИЯ
-        if (editor.session) {
-            editor.session.on('change', changeHandler);
-        }
-        
-        if (editor.selection) {
-            editor.selection.on('changeCursor', cursorHandler);
-        }
-
-        this.log.debug('Автосохранение настроено', { 
-            delay: saveDelay,
-            hasGetSelections: !!editor.getSelections,
-            hasGetCursorPosition: !!editor.getCursorPosition
-        });
-
-        // ФУНКЦИЯ ОЧИСТКИ
-        this.autoSaveCleanup = () => {
-            if (editor.session) {
-                editor.session.off('change', changeHandler);
-            }
-            if (editor.selection) {
-                editor.selection.off('changeCursor', cursorHandler);
-            }
-            this.log.debug('Автосохранение отключено');
-        };
-
-        return this.autoSaveCleanup;
-    }
-
     //Проверка совместимости с редактором
     checkEditorCompatibility(editor) {
         return {
@@ -291,12 +218,6 @@ export default class StateManager {
         try {
             localStorage.removeItem(this.stateKey);
             
-            // ОЧИСТКА АВТОСОХРАНЕНИЯ
-            if (this.autoSaveCleanup) {
-                this.autoSaveCleanup();
-                this.autoSaveCleanup = null;
-            }
-            
             this.log.info('Состояние очищено', { stateKey: this.stateKey });
             return true;
         } catch (error) {
@@ -317,41 +238,7 @@ export default class StateManager {
         return `${minutes}м`;
     }
 
-    getStateInfo() {
-        const state = this.loadState();
-        if (!state) return null;
-
-        return {
-            exists: true,
-            age: this.formatAge(state.timestamp),
-            contentLength: state.metadata?.contentLength || 0,
-            lines: state.metadata?.lines || 0,
-            selectionsCount: state.selections?.length || 0,
-            timestamp: formatTimestamp(state.timestamp),
-            version: state.version,
-            truncated: state.metadata?.truncated || false
-        };
-    }
-
-    // СТАТИСТИКА
-    getStats() {
-        const state = this.loadState();
-        const exists = !!state;
-        
-        return {
-            exists,
-            stateKey: this.stateKey,
-            consoleType: this.consoleType,
-            hasAutoSave: !!this.autoSaveCleanup,
-            ...(exists ? this.getStateInfo() : {})
-        };
-    }
-
     destroy() {
-        this.log.info('StateManager уничтожен', { stateId: this.stateId });
-        
-        if (this.autoSaveCleanup) {
-            this.autoSaveCleanup();
-        }
+        this.log.info('StateManager уничтожен', { stateKey: this.stateKey });
     }
 }

@@ -175,7 +175,7 @@ export default class PreferencesManager {
         return true;
     }
 
-    //  СОХРАНЕНИЕ С ПАКЕТНОЙ ОПТИМИЗАЦИЕЙ
+    //  СОХРАНЕНИЕ
     save(key, value) {
         try {
             
@@ -214,13 +214,11 @@ export default class PreferencesManager {
         }
     }
 
-    // ПАКЕТНОЕ СОХРАНЕНИЕ (для нескольких изменений сразу)
     saveBatch(key, value) {
         this.batchUpdates.set(key, value);
         this.batchSave();
     }
 
-    // ПРИВАТНЫЙ МЕТОД ДЛЯ ПАКЕТНОГО СОХРАНЕНИЯ
     _batchSave() {
         if (this.batchUpdates.size === 0) return;
 
@@ -280,7 +278,6 @@ export default class PreferencesManager {
         return preferences[key] ?? defaultValue;
     }
 
-    // СИСТЕМА СОБЫТИЙ С УЛУЧШЕННОЙ ОБРАБОТКОЙ
     addListener(callback) {
         this.listeners.add(callback);
         
@@ -294,10 +291,6 @@ export default class PreferencesManager {
                 totalListeners: this.listeners.size 
             });
         };
-    }
-
-    removeListener(callback) {
-        this.listeners.delete(callback);
     }
 
     notifyListeners(key, newValue, oldValue) {
@@ -315,56 +308,6 @@ export default class PreferencesManager {
         });
     }
 
-    // УТИЛИТЫ С ЛОГГИРОВАНИЕМ
-    resetToDefaults() {
-        const defaults = this.getDefaultPreferences();
-        const result = this.saveAll(defaults);
-        
-        if (result) {
-            this.log.info('Настройки сброшены к значениям по умолчанию');
-        }
-        
-        return result;
-    }
-
-    export() {
-        const data = this.load();
-        this.log.debug('Настройки экспортированы', { 
-            size: JSON.stringify(data).length 
-        });
-        
-        return JSON.stringify(data, null, 2);
-    }
-
-    import(jsonString) {
-        try {
-            // safeJsonParse ИЗ HELPERS
-            const imported = safeJsonParse(jsonString, null);
-            
-            if (!imported) {
-                this.log.error('Ошибка импорта: неверный JSON');
-                return false;
-            }
-            
-            const result = this.saveAll(imported);
-            
-            if (result) {
-                this.log.info('Настройки импортированы', {
-                    keys: Object.keys(imported).length
-                });
-            }
-            
-            return result;
-        } catch (error) {
-            this.log.error('Ошибка импорта настроек', { error: error.message });
-            return false;
-        }
-    }
-
-    getAll() {
-        return this.load();
-    }
-
     clear() {
         try {
             const oldPreferences = this.load();
@@ -379,36 +322,6 @@ export default class PreferencesManager {
             this.log.error('Ошибка очистки настроек', { error: error.message });
             return false;
         }
-    }
-
-    getInfo() {
-        const prefs = this.load();
-        return {
-            version: this.version,
-            totalSettings: Object.keys(prefs).length,
-            storageKey: this.storageKey,
-            hasListeners: this.listeners.size,
-            schemaVersion: '1.0'
-        };
-    }
-
-    // ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ
-    has(key) {
-        const prefs = this.load();
-        return key in prefs;
-    }
-
-    getSize() {
-        const data = localStorage.getItem(this.storageKey);
-        return data ? new Blob([data]).size : 0;
-    }
-
-    getStorageInfo() {
-        return {
-            size: this.getSize(),
-            keys: Object.keys(this.load()).length,
-            listeners: this.listeners.size
-        };
     }
 
     destroy() {

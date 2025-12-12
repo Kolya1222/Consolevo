@@ -6,14 +6,48 @@ document.addEventListener('DOMContentLoaded', async function() {
         executeRoute: consoleElement.dataset.executeRoute,
         consoleType: consoleElement.dataset.consoleType
     }; 
+    
     try {
         window.consoleManager = new ConsoleManager(config);
         await window.consoleManager.init();
         
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'DESTROY_CONSOLE') {
+                console.log('Получена команда уничтожения консоли');
+                
+                if (window.consoleManager) {
+                    window.consoleManager.destroy();
+                    window.consoleManager = null;
+                }
+
+                if (event.source) {
+                    event.source.postMessage({
+                        type: 'CONSOLE_DESTROYED',
+                        status: 'success'
+                    }, '*');
+                }
+            }
+        });
+        
+        window.addEventListener('unload', function() {
+            if (window.consoleManager) {
+                window.consoleManager.destroy();
+                window.consoleManager = null;
+            }
+        });
+        
     } catch (error) {
         console.error('Ошибка инициализации ConsoleManager:', error);
         
-        // ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ
+        if (window.consoleManager) {
+            try {
+                window.consoleManager.destroy();
+            } catch (e) {
+                console.error('Ошибка при уничтожении после сбоя:', e);
+            }
+            window.consoleManager = null;
+        }
+
         const outputElement = document.getElementById('console-output');
         if (outputElement) {
             outputElement.innerHTML += `

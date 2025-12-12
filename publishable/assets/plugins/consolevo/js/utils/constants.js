@@ -83,15 +83,6 @@ export const PREFERENCES_SCHEMA = {
     }
 };
 
-// ДОБАВИМ КОНФИГУРАЦИЮ ДЛЯ SESSION И STATE MANAGER
-export const SESSION_CONFIG = {
-    maxHistoryPerSession: 100,
-    maxSessions: 20,
-    sessionTimeout: 24 * 60 * 60 * 1000, // 24 часа
-    autoSaveDelay: 1000,
-    storageKey: 'consolevo_sessions'
-};
-
 export const STATE_CONFIG = {
     autoSaveDelay: 2000,
     maxStateAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
@@ -105,14 +96,12 @@ export const STATE_CONFIG = {
  */
 export const MODULES_CONFIG = {
     initializationOrder: [
-        'preferences',
-        'theme', 
+        'preferences', 
         'state',
         'output',
         'api',
         'editor',
-        'history',
-        'keyboard'
+        'history'
     ],
     domSelectors: {
         themeSelector: '#theme-selector',

@@ -5,7 +5,6 @@ import {
     safeJsonParse, 
     debounce,
     formatExecutionTime,
-    generateId
 } from '../utils/helpers.js';
 
 /**
@@ -79,7 +78,6 @@ export default class ApiClient {
      * @property {number} [timeout] - Таймаут запроса в миллисекундах
      * @property {number} [retries] - Количество повторов при ошибках
      * @property {function(string): void} [onProgress] - Колбэк для уведомлений о прогрессе
-     * @property {string} [requestId] - Уникальный идентификатор запроса
      */
 
     /**
@@ -116,27 +114,24 @@ export default class ApiClient {
             timeout = this.requestTimeout,
             retries = this.maxRetries,
             onProgress = null,
-            requestId = generateId('req_')
         } = options;
 
         const payload = this.buildPayload(code);
         
         this.log.info('Отправка запроса выполнения кода', { 
             type: this.consoleType, 
-            requestId,
             codeLength: code.length 
         });
 
         const startTime = performance.now();
 
         try {
-            const response = await this.makeRequest(payload, timeout, retries, onProgress, requestId);
+            const response = await this.makeRequest(payload, timeout, retries, onProgress);
             const validatedResponse = this.validateResponse(response);
             
             const duration = performance.now() - startTime;
             
             this.logRequest({
-                requestId,
                 type: this.consoleType,
                 success: true,
                 duration,
@@ -151,7 +146,6 @@ export default class ApiClient {
             // ОБРАБОТКА HTML ОШИБОК EVOLUTION CMS
             if (error.isHtmlError) {
                 this.log.warn('Возвращаем HTML ошибку как результат', { 
-                    requestId,
                     htmlLength: error.htmlContent?.length 
                 });
                 
@@ -166,7 +160,6 @@ export default class ApiClient {
                 };
                 
                 this.logRequest({
-                    requestId,
                     type: this.consoleType,
                     success: false,
                     duration,
@@ -178,7 +171,6 @@ export default class ApiClient {
             }
             
             this.logRequest({
-                requestId,
                 type: this.consoleType,
                 success: false,
                 duration,
@@ -187,7 +179,6 @@ export default class ApiClient {
             });
 
             this.log.error('Ошибка выполнения API запроса', { 
-                requestId, 
                 error: error.message,
                 duration: formatExecutionTime(duration)
             });
@@ -229,10 +220,9 @@ export default class ApiClient {
      * @param {number} timeout - Таймаут
      * @param {number} maxRetries - Максимум повторов
      * @param {Function} onProgress - Колбэк прогресса
-     * @param {string} requestId - ID запроса
      * @returns {Promise<Object>} Ответ сервера
      */
-    async makeRequest(payload, timeout, maxRetries, onProgress, requestId) {
+    async makeRequest(payload, timeout, maxRetries, onProgress) {
         let lastError;
         let attempts = 0;
 
@@ -244,7 +234,7 @@ export default class ApiClient {
                     onProgress(`Выполнение... ${attempt}/${maxRetries}`);
                 }
 
-                this.log.debug(`Попытка запроса ${attempt}/${maxRetries}`, { requestId });
+                this.log.debug(`Попытка запроса ${attempt}/${maxRetries}`);
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -256,7 +246,6 @@ export default class ApiClient {
                         'X-CSRF-TOKEN': payload._token,
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'application/json',
-                        'X-Request-ID': requestId
                     },
                     body: JSON.stringify(payload),
                     signal: controller.signal
@@ -277,21 +266,19 @@ export default class ApiClient {
                 
                 // ОБРАБОТКА HTML ОШИБОК - НЕ ПОВТОРЯЕМ ЗАПРОС
                 if (error.isHtmlError) {
-                    this.log.warn('HTML ошибка Evolution CMS - пропускаем повторные попытки', { 
-                        requestId,
+                    this.log.warn('🔄 HTML ошибка Evolution CMS - пропускаем повторные попытки', { 
                         status: error.status
                     });
                     throw error;
                 }
                 
                 if (error.name === 'AbortError') {
-                    this.log.warn('Таймаут запроса', { requestId, attempt, timeout });
+                    this.log.warn('Таймаут запроса', { attempt, timeout });
                     throw new Error(`Таймаут запроса (${timeout}ms)`);
                 }
 
                 if (attempt < maxRetries) {
                     this.log.warn(`Попытка ${attempt} не удалась`, { 
-                        requestId, 
                         error: error.message,
                         nextRetry: this.retryDelay * attempt 
                     });
@@ -445,7 +432,6 @@ export default class ApiClient {
 
     /**
      * @typedef {Object} RequestLogData
-     * @property {string} requestId - ID запроса
      * @property {string} type - Тип консоли
      * @property {boolean} success - Статус выполнения
      * @property {number} duration - Длительность выполнения в ms

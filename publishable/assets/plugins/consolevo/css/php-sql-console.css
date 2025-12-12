@@ -1081,7 +1081,7 @@
 /* Основной контейнер автодополнения */
 .ace_editor.ace_autocomplete {
     width: 500px !important;
-    max-height: 400px !important; /* ⬅️ МАКСИМАЛЬНАЯ высота */
+    max-height: 400px !important;
     font-size: 16px !important;
 }
 
