@@ -25,6 +25,5 @@ Route::prefix('consolevo')->middleware([
     Route::get('/sql/database-info', [SqlConsoleController::class, 'getDatabaseInfo']);
 
     // Подсказки для PHP
-    Route::get('/analysis/evo-data', [AnalysisController::class, 'getEvoCompletionData']);
-    Route::get('/analysis/static-data', [AnalysisController::class, 'getStaticCompletionData']);
+    Route::get('/analysis/unified-data', [AnalysisController::class, 'getUnifiedData']);
 });

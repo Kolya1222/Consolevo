@@ -5,52 +5,35 @@ use roilafx\Consolevo\Analyzers\EvoAnalyzer;
 
 class AnalysisController
 {
-    public function getEvoCompletionData()
+    /**
+     * Единый endpoint для всех данных автодополнения
+     */
+    public function getUnifiedData()
     {
         try {
             $analyzer = new EvoAnalyzer();
             $data = $analyzer->generateCompletionData();
             
-            // Убеждаемся, что все поля являются массивами
             $data = $this->ensureArrayStructure($data);
             
             return response()->json([
                 'success' => true,
                 'data' => $data,
                 'source' => 'dynamic',
-                'stats' => [
-                    'methods' => count($data['methods']),
-                    'properties' => count($data['properties']),
-                    'constants' => count($data['constants']),
-                    'functions' => count($data['functions'])
-                ]
+                'timestamp' => time(),
+                'stats' => $this->calculateStats($data)
             ]);
             
         } catch (\Exception $e) {
+            // Если анализ не удался, возвращаем ошибку
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'timestamp' => time()
             ], 500);
         }
     }
-
-    public function getStaticCompletionData()
-    {
-        $staticData = $this->getStaticAnalysisData();
-        
-        return response()->json([
-            'success' => true,
-            'data' => $staticData,
-            'source' => 'static',
-            'stats' => [
-                'methods' => count($staticData['methods']),
-                'properties' => count($staticData['properties']),
-                'constants' => count($staticData['constants']),
-                'functions' => count($staticData['functions'])
-            ]
-        ]);
-    }
-
+    
     /**
      * Гарантирует, что все поля данных являются массивами
      */
@@ -65,73 +48,17 @@ class AnalysisController
             'version' => $data['version'] ?? '1.0'
         ];
     }
-
-    private function getStaticAnalysisData(): array
+    
+    /**
+     * Рассчитывает статистику
+     */
+    private function calculateStats(array $data): array
     {
         return [
-            'methods' => [
-                [
-                    'name' => 'DocumentParser::getConfig',
-                    'params' => [['name' => '$key', 'default' => '', 'full' => '$key']],
-                    'full_signature' => 'getConfig($key)'
-                ],
-                [
-                    'name' => 'DocumentParser::getDocumentObject',
-                    'params' => [['name' => '$id', 'default' => '', 'full' => '$id']],
-                    'full_signature' => 'getDocumentObject($id)'
-                ],
-                [
-                    'name' => 'DocumentParser::runSnippet',
-                    'params' => [
-                        ['name' => '$snippetName', 'default' => '', 'full' => '$snippetName'],
-                        ['name' => '$params', 'default' => '[]', 'full' => '$params = []']
-                    ],
-                    'full_signature' => 'runSnippet($snippetName, $params = [])'
-                ],
-                [
-                    'name' => 'Database::query',
-                    'params' => [
-                        ['name' => '$sql', 'default' => '', 'full' => '$sql'],
-                        ['name' => '$bindings', 'default' => '[]', 'full' => '$bindings = []']
-                    ],
-                    'full_signature' => 'query($sql, $bindings = [])'
-                ]
-            ],
-            'properties' => [
-                'DocumentParser->config',
-                'DocumentParser->documentObject', 
-                'DocumentParser->documentIdentifier',
-                'DocumentParser->documentContent'
-            ],
-            'constants' => [
-                'MODX_BASE_PATH',
-                'MODX_BASE_URL', 
-                'MODX_SITE_URL',
-                'MODX_MANAGER_PATH'
-            ],
-            'functions' => [
-                [
-                    'name' => 'evolutionCMS',
-                    'params' => [],
-                    'full_signature' => 'evolutionCMS()'
-                ],
-                [
-                    'name' => 'db',
-                    'params' => [['name' => '$sql', 'default' => '', 'full' => '$sql']],
-                    'full_signature' => 'db($sql)'
-                ],
-                [
-                    'name' => 'getTV',
-                    'params' => [
-                        ['name' => '$tvName', 'default' => '', 'full' => '$tvName'],
-                        ['name' => '$docId', 'default' => '', 'full' => '$docId'],
-                        ['name' => '$published', 'default' => '1', 'full' => '$published = 1']
-                    ],
-                    'full_signature' => 'getTV($tvName, $docId, $published = 1)'
-                ]
-            ],
-            'generated_at' => date('Y-m-d H:i:s'),
-            'version' => '1.0'
+            'methods' => count($data['methods'] ?? []),
+            'properties' => count($data['properties'] ?? []),
+            'constants' => count($data['constants'] ?? []),
+            'functions' => count($data['functions'] ?? [])
         ];
     }
 }

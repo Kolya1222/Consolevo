@@ -11,12 +11,11 @@ import {
     throttle,
     escapeSqlIdentifier
 } from '../utils/helpers.js';
-
 import { 
-    PHP_SNIPPETS,
-    generatePhpCompletions,
-    generateEvoSnippets 
-} from '../utils/php-completion-data.js'
+    analyzeEvolutionCMS,
+    generateEvoCompletionsFromAnalysis,
+    generateEvoSnippetsFromAnalysis
+} from '../utils/analyze-evo.js';
 
 /**
  * @typedef {Object} TableInfo
@@ -337,13 +336,15 @@ export default class AceEditor {
             let snippets = [];
             
             if (this.consoleType === 'php') {
-                // Загружаем динамические данные Evolution CMS
-                const evoSnippets = await generateEvoSnippets();
+                const analysis = await analyzeEvolutionCMS();
+                const evoSnippets = generateEvoSnippetsFromAnalysis(analysis);
+                
                 snippets = [
-                    ...PHP_SNIPPETS,
                     ...evoSnippets
                 ];
-                await this.setupPhpCompleter(langTools);
+                
+                await this.setupPhpCompleter(langTools, analysis);
+                
             } else {
                 snippets = generateSqlSnippets(this.databaseTables, this.tableColumns);
                 this.setupSqlCompleter(langTools);
@@ -365,10 +366,12 @@ export default class AceEditor {
     /**
      * Настройка PHP completer с динамическими данными
      * @param {Object} langTools - Объект language_tools из Ace Editor
+     * @param {Object} analysis - Результат анализа Evolution CMS
      * @returns {Promise<void>}
      */
-    async setupPhpCompleter(langTools) {
-        const evoCompletions = await generatePhpCompletions();
+    async setupPhpCompleter(langTools, analysis) {
+        // Генерируем автодополнения из анализа
+        const evoCompletions = generateEvoCompletionsFromAnalysis(analysis);
         
         const phpCompleter = {
             /**
@@ -382,8 +385,9 @@ export default class AceEditor {
                 try {
                     const searchPrefix = prefix.toLowerCase();
                     
-                    const completions = [
-                        ...evoCompletions,
+                    // Объединяем все подсказки
+                    const allCompletions = [
+                        ...evoCompletions
                     ].filter(comp => {
                         if (!comp || !comp.name) return false;
                         if (searchPrefix.length > 0) {
@@ -392,7 +396,7 @@ export default class AceEditor {
                         return true;
                     });
                     
-                    callback(null, completions);
+                    callback(null, allCompletions);
                 } catch (error) {
                     console.error('Error in PHP completer:', error);
                     callback(null, []);
