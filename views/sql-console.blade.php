@@ -28,13 +28,12 @@
         'executeRoute' => route('consolevo.sql.execute'),
         'consoleType' => 'sql'
     ])
-
     {{-- Статус бар --}}
     @include('consolevo::partials.status-bar', [
         'items' => [
             [
                 'icon' => 'fas fa-circle',
-                'text' => 'База данных: ' . config('database.connections.mysql.database')
+                'text' => 'База данных: ' . config('database.connections.default.database')
             ],
             [
                 'icon' => 'fas fa-server',
@@ -44,10 +43,6 @@
                 'icon' => 'far fa-clock',
                 'text' => 'Время выполнения: ',
                 'dynamic' => 'execution-time'
-            ],
-            [
-                'icon' => 'fas fa-shield-alt',
-                'text' => 'Защищённый режим'
             ]
         ]
     ])

@@ -15,7 +15,7 @@
                 <i class="{{ $nav['icon'] }}"></i> {{ $nav['title'] }}
             </a>
         @endforeach
-        <button class="btn btn-outline btn-sm" id="show-history" title="Показать историю (Alt+Shift+H)">
+        <button class="btn btn-outline btn-sm" id="show-history" title="Показать историю">
             <i class="fas fa-history"></i> История
         </button>
     </div>

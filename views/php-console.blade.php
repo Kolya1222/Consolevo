@@ -45,10 +45,6 @@
                 'icon' => 'far fa-clock',
                 'text' => 'Время выполнения: ',
                 'dynamic' => 'execution-time'
-            ],
-            [
-                'icon' => 'fas fa-shield-alt',
-                'text' => 'Безопасный режим'
             ]
         ]
     ])

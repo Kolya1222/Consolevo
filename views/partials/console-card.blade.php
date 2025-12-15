@@ -5,24 +5,19 @@
             <i class="{{ $icon }}"></i>
             {{ $title }}
         </div>
-        <div class="card-actions flex gap-2">
-            <button id="execute-code" class="btn btn-primary" title="Выполнить код (Alt+Enter)">
-                <i class="fas fa-play"></i> Выполнить
-            </button>
-            <button id="clear-console" class="btn btn-outline" title="Очистить консоль (Alt+L)">
-                <i class="fas fa-broom"></i> Очистить
-            </button>
-        </div>
     </div>
 
     {{-- Контейнер для редактора кода --}}
     <div class="editor-container">
         <div class="editor-toolbar">
-            <button class="toolbar-btn" id="execute-editor" title="Выполнить (Alt+Enter)">
+            <button class="toolbar-btn" id="execute-editor" title="Выполнить">
                 <i class="fas fa-play"></i> Выполнить
             </button>
-            <button class="toolbar-btn" id="clear-editor" title="Очистить редактор (Alt+L)">
+            <button class="toolbar-btn" id="clear-editor" title="Очистить редактор">
                 <i class="fas fa-eraser"></i> Очистить
+            </button>
+            <button id="clear-console" class="toolbar-btn" title="Очистить вывод">
+                <i class="fas fa-broom"></i> Очистить вывод
             </button>
             <select class="theme-selector" id="theme-selector">
                 <option value="ace/theme/tomorrow_night">Tomorrow Night</option>
@@ -58,9 +53,5 @@
                 <span>{{ $message['text'] }}</span>
             </div>
         @endforeach
-    </div>
-
-    <div class="shortcuts-hint">
-        <small>Горячие клавиши: Alt+Enter - выполнить, Alt+L - очистить, Alt+? - справка</small>
     </div>
 </div>

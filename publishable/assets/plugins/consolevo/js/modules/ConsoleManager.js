@@ -14,20 +14,82 @@ import {
 import { MODULES_CONFIG } from '../utils/constants.js';
 
 /**
+ * @typedef {Object} ConsoleManagerConfig
+ * @property {string} executeRoute - URL для выполнения кода
+ * @property {'php' | 'sql'} consoleType - Тип консоли
+ */
+
+/**
+ * @typedef {Object} ConsoleManagerModules
+ * @property {PreferencesManager} preferences - Менеджер настроек
+ * @property {StateManager} state - Менеджер состояния
+ * @property {OutputManager} output - Менеджер вывода
+ * @property {ApiClient} api - API клиент
+ * @property {AceEditor} editor - Редактор кода
+ * @property {CommandHistory} history - История команд
+ */
+
+/**
+ * @typedef {Object} DOMElements
+ * @property {HTMLButtonElement|null} executeBtn - Кнопка выполнения
+ * @property {HTMLButtonElement|null} executeEditorBtn - Кнопка выполнения в редакторе
+ * @property {HTMLButtonElement|null} clearConsoleBtn - Кнопка очистки консоли
+ * @property {HTMLButtonElement|null} clearEditorBtn - Кнопка очистки редактора
+ * @property {HTMLSelectElement|null} themeSelector - Селектор темы
+ * @property {HTMLSelectElement|null} fontSizeSelector - Селектор размера шрифта
+ * @property {HTMLInputElement|null} wrapModeToggle - Переключатель переноса строк
+ * @property {HTMLButtonElement|null} showHistoryBtn - Кнопка показа истории
+ * @property {HTMLElement|null} executionTime - Элемент времени выполнения
+ * @property {HTMLElement|null} memoryUsage - Элемент использования памяти
+ */
+
+/**
  * Интеллектуальный фасад для управления всеми модулями консоли
  * @class ConsoleManager
  */
 export default class ConsoleManager {
+    /**
+     * Создает экземпляр менеджера консоли
+     * @param {ConsoleManagerConfig} config - Конфигурация менеджера
+     */
     constructor(config = {}) {
+        /**
+         * Конфигурация менеджера
+         * @type {ConsoleManagerConfig}
+         */
         this.config = {
             executeRoute: config.executeRoute,
             consoleType: config.consoleType,
         };
         
+        /**
+         * Загруженные модули
+         * @type {ConsoleManagerModules}
+         */
         this.modules = {};
+        
+        /**
+         * Флаг выполнения кода
+         * @type {boolean}
+         */
         this.isExecuting = false;
+        
+        /**
+         * Модальное окно истории
+         * @type {HistoryModal|null}
+         */
         this.historyModal = null;
+        
+        /**
+         * Кэшированные DOM элементы
+         * @type {DOMElements}
+         */
         this.domElements = {};
+        
+        /**
+         * Последовательность инициализации модулей
+         * @type {string[]}
+         */
         this.initSequence = [
             'preferences',
             'state',
@@ -36,17 +98,33 @@ export default class ConsoleManager {
             'editor',
             'history'
         ];
+        
+        /**
+         * Логгер
+         * @type {Object}
+         */
         this.log = logger('ConsoleManager');
     }
 
+    /**
+     * Инициализирует ConsoleManager и все его модули
+     * @async
+     * @returns {Promise<void>}
+     * @throws {Error} При критической ошибке инициализации
+     * @example
+     * const consoleManager = new ConsoleManager({
+     *   executeRoute: '/api/execute',
+     *   consoleType: 'php'
+     * });
+     * await consoleManager.init();
+     */
     async init() {
         try {
+            this.setupFacadeMethods();
             await this.initializeModules();
             this.cacheDOMElements();
-            this.setupFacadeMethods();
             this.loadAndApplyPreferences();
             await this.restoreEditorState();
-            await this.setupPreferencesReactivity();
             this.setupEventListeners();
             this.log.info('ConsoleManager успешно инициализирован');
         } catch (error) {
@@ -55,7 +133,19 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Настраивает фасадные методы для удобного доступа к функциональности модулей
+     * @returns {void}
+     * @private
+     */
     setupFacadeMethods() {
+        // EDITOR METHODS
+        /**
+         * Применяет тему к редактору
+         * @method ConsoleManager#applyTheme
+         * @param {string} themeId - Идентификатор темы
+         * @returns {boolean} true если тема применена успешно
+         */
         this.applyTheme = (themeId) => {
             if (this.modules.editor) {
                 this.modules.editor.setTheme(themeId);
@@ -66,22 +156,71 @@ export default class ConsoleManager {
             return false;
         };
 
-        // OUTPUT MANAGER
+        // OUTPUT MANAGER METHODS
+        /**
+         * Добавляет сообщение об ошибке
+         * @method ConsoleManager#addError
+         * @param {string} message - Сообщение об ошибке
+         * @param {string} [context=''] - Контекст ошибки
+         * @returns {void}
+         */
         this.addError = (message, context = '') => this.modules.output?.addError(message, context);
+        
+        /**
+         * Добавляет предупреждение
+         * @method ConsoleManager#addWarning
+         * @param {string} message - Текст предупреждения
+         * @param {string} [context=''] - Контекст предупреждения
+         * @returns {void}
+         */
         this.addWarning = (message, context = '') => this.modules.output?.addWarning(message, context);
+        
+        /**
+         * Добавляет информационное сообщение
+         * @method ConsoleManager#addInfo
+         * @param {string} message - Текст сообщения
+         * @param {boolean} [isHtml=false] - Является ли сообщение HTML
+         * @returns {void}
+         */
         this.addInfo = (message, isHtml = false) => this.modules.output?.add(message, 'info', isHtml);
+        
+        /**
+         * Добавляет сообщение об успехе
+         * @method ConsoleManager#addSuccess
+         * @param {string} message - Текст сообщения
+         * @param {boolean} [isHtml=false] - Является ли сообщение HTML
+         * @returns {void}
+         */
         this.addSuccess = (message, isHtml = false) => this.modules.output?.add(message, 'success', isHtml);
-        this.addSeparator = () => this.modules.output?.addSeparator();
+        
+        /**
+         * Очищает вывод консоли
+         * @method ConsoleManager#clearOutput
+         * @returns {void}
+         */
         this.clearOutput = () => this.modules.output?.clear();
-        this.highlightOutput = (pattern, className) => this.modules.output?.highlightLines(pattern, className);
-        this.addSmart = (content, type = 'info') => this.modules.output?.addSmart(content, type);
 
-        // HISTORY MANAGER
+        // HISTORY MANAGER METHODS
+        /**
+         * Очищает историю команд
+         * @method ConsoleManager#clearHistory
+         * @returns {void}
+         */
         this.clearHistory = () => this.modules.history?.clear();
+        
+        /**
+         * Экспортирует историю команд
+         * @method ConsoleManager#exportHistory
+         * @returns {void}
+         */
         this.exportHistory = () => this.modules.history?.export();
-        this.searchHistory = (pattern) => this.modules.history?.search(pattern) || [];
 
-        // STATE MANAGER
+        // STATE MANAGER METHODS
+        /**
+         * Сохраняет состояние редактора
+         * @method ConsoleManager#saveEditorState
+         * @returns {boolean} true если состояние сохранено успешно
+         */
         this.saveEditorState = () => {
             if (!this.modules.state || !this.modules.editor) return false;
             
@@ -94,22 +233,56 @@ export default class ConsoleManager {
             });
         };
         
+        /**
+         * Очищает состояние редактора
+         * @method ConsoleManager#clearEditorState
+         * @returns {void}
+         */
         this.clearEditorState = () => this.modules.state?.clearState();
 
-        // EDITOR
+        // EDITOR METHODS
+        /**
+         * Получает содержимое редактора
+         * @method ConsoleManager#getEditorValue
+         * @returns {string} Содержимое редактора или пустая строка
+         */
         this.getEditorValue = () => this.modules.editor?.getValue() || '';
+        
+        /**
+         * Устанавливает содержимое редактора
+         * @method ConsoleManager#setEditorValue
+         * @param {string} value - Новое содержимое редактора
+         * @returns {void}
+         */
         this.setEditorValue = (value) => this.modules.editor?.setValue(value);
+        
+        /**
+         * Очищает редактор
+         * @method ConsoleManager#clearEditor
+         * @returns {void}
+         */
         this.clearEditor = () => this.modules.editor?.clear();
 
-        // PREFERENCES
-        this.getPreference = (key) => this.modules.preferences?.get(key);
+        // PREFERENCES METHODS
+        /**
+         * Сохраняет настройку
+         * @method ConsoleManager#setPreference
+         * @param {string} key - Ключ настройки
+         * @param {*} value - Значение настройки
+         * @returns {void}
+         */
         this.setPreference = (key, value) => this.modules.preferences?.save(key, value);
-        this.getAllPreferences = () => this.modules.preferences?.load() || {};
-        this.resetPreferences = () => this.modules.preferences?.resetToDefault();
 
         this.log.info('Фасадные методы настроены');
     }
 
+    /**
+     * Инициализирует все модули в определенной последовательности
+     * @async
+     * @returns {Promise<void>}
+     * @private
+     * @throws {Error} Если не удалось инициализировать модуль
+     */
     async initializeModules() {
         for (const moduleName of this.initSequence) {
             try {
@@ -148,6 +321,11 @@ export default class ConsoleManager {
         }
     }
     
+    /**
+     * Кэширует DOM элементы для быстрого доступа
+     * @returns {void}
+     * @private
+     */
     cacheDOMElements() {
         this.domElements = {};
         Object.entries(MODULES_CONFIG.domSelectors).forEach(([key, selector]) => {
@@ -155,6 +333,12 @@ export default class ConsoleManager {
         });
     }
 
+    /**
+     * Обрабатывает ошибки инициализации
+     * @param {Error} error - Объект ошибки
+     * @returns {void}
+     * @private
+     */
     handleInitError(error) {
         const errorMessage = `Ошибка инициализации: ${error.message}`;
         console.error(errorMessage);
@@ -163,6 +347,11 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Настраивает модальное окно истории
+     * @returns {void}
+     * @private
+     */
     setupHistoryModal() {
         if (!this.historyModal) return;
         
@@ -171,6 +360,12 @@ export default class ConsoleManager {
         };
     }
 
+    /**
+     * Восстанавливает состояние редактора из сохраненного состояния
+     * @async
+     * @returns {Promise<boolean>} true если состояние восстановлено успешно
+     * @private
+     */
     async restoreEditorState() {
         if (!this.modules.state || !this.modules.editor) {
             return false;
@@ -192,72 +387,28 @@ export default class ConsoleManager {
         }
     }
 
-    async setupPreferencesReactivity() {
-        if (!this.modules.preferences) return;
+    /**
+     * Загружает и применяет настройки
+     * @returns {void}
+     * @private
+     */
+    loadAndApplyPreferences() {
+        if (!this.modules.preferences || !this.modules.editor) return;
 
-        this.modules.preferences.addListener((key, newValue) => {
-            switch (key) {
-                case 'theme':
-                    if (this.modules.editor) {
-                        this.modules.editor.setTheme(newValue);
-                    }
-                    if (this.domElements.themeSelector) {
-                        this.domElements.themeSelector.value = newValue;
-                    }
-                    break;
-                case 'fontSize':
-                    if (this.modules.editor) {
-                        this.modules.editor.changeFontSize(newValue);
-                    }
-                    if (this.domElements.fontSizeSelector) {
-                        this.domElements.fontSizeSelector.value = newValue + 'px';
-                    }
-                    break;
-                case 'wrapMode':
-                    if (this.modules.editor) {
-                        this.modules.editor.toggleWrapMode(newValue);
-                    }
-                    if (this.domElements.wrapModeToggle) {
-                        this.domElements.wrapModeToggle.checked = newValue;
-                    }
-                    break;
-                case 'enableAutocomplete':
-                    if (this.modules.editor) {
-                        this.modules.editor.toggleAutocomplete(newValue);
-                    }
-                    break;
-                case 'showLineNumbers':
-                case 'highlightActiveLine':
-                    if (this.modules.editor && this.modules.editor.editor) {
-                        this.modules.editor.editor.setOption(key, newValue);
-                    }
-                    break;
-            }
+        const prefs = this.modules.preferences.load();
+        this.modules.editor.applyPreferences(prefs);
+        this.updatePreferenceUI(prefs);
+        this.log.debug('Настройки применены', {
+            settingsCount: Object.keys(prefs).length
         });
     }
 
-    loadAndApplyPreferences() {
-        if (!this.modules.preferences || !this.modules.editor) return;
-        
-        // Загружаем настройки
-        const prefs = this.modules.preferences.load();
-        
-        const defaultPrefs = this.modules.preferences.getDefaultPreferences();
-        const hasUserPreferences = Object.keys(prefs).some(key => 
-            key !== 'version' && prefs[key] !== defaultPrefs[key]
-        );
-        
-        if (hasUserPreferences) {
-            this.modules.editor.applyPreferences(prefs);
-            this.updatePreferenceUI(prefs);
-            this.log.debug('Пользовательские настройки применены', {
-                settings: Object.keys(prefs).filter(k => k !== 'version')
-            });
-        } else {
-            this.log.debug('Применены только настройки по умолчанию');
-        }
-    }
-
+    /**
+     * Обновляет UI элементов настроек
+     * @param {Object} prefs - Объект настроек
+     * @returns {void}
+     * @private
+     */
     updatePreferenceUI(prefs) {
         if (prefs.theme && this.domElements.themeSelector) {
             this.domElements.themeSelector.value = prefs.theme;
@@ -270,6 +421,11 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Настраивает обработчики событий для DOM элементов
+     * @returns {void}
+     * @private
+     */
     setupEventListeners() {
         const { executeBtn, executeEditorBtn, clearConsoleBtn, clearEditorBtn } = this.domElements;
         
@@ -313,6 +469,12 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Показывает модальное окно истории команд
+     * @returns {void}
+     * @example
+     * consoleManager.showHistory(); // Открывает окно истории
+     */
     showHistory() {
         if (this.historyModal) {
             this.historyModal.show();
@@ -321,6 +483,141 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Обновляет состояние кнопки выполнения
+     * @param {boolean} isExecuting - Флаг выполнения
+     * @private
+     */
+    updateExecuteButtonState(isExecuting) {
+        const { executeBtn, executeEditorBtn } = this.domElements;
+        
+        const updateButton = (btn) => {
+            if (!btn) return;
+            
+            if (isExecuting) {
+                // Сохраняем оригинальный текст
+                if (!btn.dataset.originalText) {
+                    btn.dataset.originalText = btn.innerHTML;
+                }
+                
+                // Блокируем кнопку
+                btn.disabled = true;
+                btn.setAttribute('aria-disabled', 'true');
+                
+                // Добавляем спиннер
+                const spinnerHtml = '<span class="execution-spinner"></span>';
+                const textSpan = btn.querySelector('.btn-text') || document.createElement('span');
+                
+                if (!btn.querySelector('.btn-text')) {
+                    textSpan.className = 'btn-text';
+                    textSpan.textContent = btn.textContent;
+                    btn.innerHTML = '';
+                }
+                
+                btn.innerHTML = `${spinnerHtml}<span class="btn-text">Выполняется...</span>`;
+                btn.classList.add('btn-executing');
+                
+            } else {
+                // Восстанавливаем оригинальный текст
+                const originalHtml = btn.dataset.originalText;
+                if (originalHtml) {
+                    btn.innerHTML = originalHtml;
+                }
+                
+                // Разблокируем кнопку
+                btn.disabled = false;
+                btn.removeAttribute('aria-disabled');
+                btn.classList.remove('btn-executing');
+            }
+        };
+        
+        [executeBtn, executeEditorBtn].forEach(updateButton);
+    }
+
+    /**
+     * Показывает/скрывает индикатор выполнения в выводе
+     * @param {boolean} show - Показать индикатор
+     * @private
+     */
+    showExecutionIndicator(show = true) {
+        if (!this.modules.output || !this.modules.output.outputElement) {
+            this.log.warn('Контейнер вывода не доступен');
+            return;
+        }
+        
+        const outputElement = this.modules.output.outputElement;
+        const indicatorId = 'execution-indicator';
+        
+        if (show) {
+            // Убираем существующий индикатор (на всякий случай)
+            const existingIndicator = outputElement.querySelector(`#${indicatorId}`);
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+            
+            // Создаем индикатор
+            const indicator = document.createElement('div');
+            indicator.id = indicatorId;
+            indicator.className = 'execution-indicator fade-in';
+            indicator.innerHTML = `
+                <div class="execution-progress">
+                    <div class="execution-progress-bar"></div>
+                </div>
+                <div class="execution-message">
+                    <span class="execution-spinner"></span>
+                    <span>Выполнение кода...</span>
+                </div>
+            `;
+            
+            // Добавляем в вывод
+            outputElement.appendChild(indicator);
+            
+            // Прокручиваем к индикатору
+            this.modules.output.scrollToBottom();
+            
+            this.log.debug('Индикатор выполнения показан');
+        } else {
+            // Убираем индикатор
+            const indicator = outputElement.querySelector(`#${indicatorId}`);
+            if (indicator) {
+                // Добавляем анимацию исчезновения
+                indicator.classList.add('fade-out');
+                
+                // Удаляем после анимации
+                setTimeout(() => {
+                    if (indicator.parentNode === outputElement) {
+                        indicator.remove();
+                    }
+                }, 300);
+            }
+        }
+    }
+
+    /**
+     * Обновляет прогресс выполнения
+     * @param {number} progress - Прогресс от 0 до 100
+     * @private
+     */
+    updateExecutionProgress(progress) {
+        if (!this.modules.output || !this.modules.output.outputElement) return;
+        
+        const outputElement = this.modules.output.outputElement;
+        const indicator = outputElement.querySelector('#execution-indicator');
+        if (!indicator) return;
+        
+        const progressBar = indicator.querySelector('.execution-progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+        }
+    }
+    /**
+     * Навигация по истории команд
+     * @param {number} direction - Направление навигации (1 - вперед, -1 - назад)
+     * @returns {void}
+     * @example
+     * consoleManager.navigateHistory(-1); // Перейти к предыдущей команде
+     * consoleManager.navigateHistory(1); // Перейти к следующей команде
+     */
     navigateHistory(direction) {
         if (!this.modules.history) return;
         
@@ -333,11 +630,30 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Выполняет код из редактора
+     * @async
+     * @returns {Promise<void>}
+     */
     async executeCode() {
-        if (this.isExecuting) return;
+        if (this.isExecuting) {
+            this.addWarning('Код уже выполняется', 'ConsoleManager');
+            return;
+        }
         
         this.isExecuting = true;
         const code = this.getEditorValue();
+        
+        if (!code.trim()) {
+            this.addWarning('Введите код для выполнения', 'ConsoleManager');
+            this.isExecuting = false;
+            return;
+        }
+        
+        // Показываем индикаторы
+        this.updateExecuteButtonState(true);
+        this.showExecutionIndicator(true);
+        this.updateExecutionProgress(10); // Начальный прогресс
         
         this.saveEditorState();
         
@@ -345,38 +661,60 @@ export default class ConsoleManager {
         if (!validation.valid) {
             this.addWarning(validation.error, 'Валидация');
             this.isExecuting = false;
+            this.updateExecuteButtonState(false);
+            this.showExecutionIndicator(false);
             return;
         }
-        
-        this.modules.output.add(code, 'input');
         
         if (this.modules.history) {
             this.modules.history.add(code);
         }
         
         try {
+            this.updateExecutionProgress(30); // Прогресс после валидации
+            
             const result = await this.modules.api.execute(code);
+            this.updateExecutionProgress(70); // Прогресс после получения результата
             
             if (result && result.success) {
                 this.modules.output.handleSuccess(result, this.config.consoleType);
                 if (result.execution_time) {
                     this.updateStatistics(result);
                 }
+                this.updateExecutionProgress(100); // Полное завершение
+                
+                // Небольшая задержка чтобы показать 100% прогресс
+                await new Promise(resolve => setTimeout(resolve, 200));
             } else {
                 const errorMessage = result?.error || 'Ошибка выполнения';
-                this.addError(errorMessage);
+                this.addError(errorMessage, 'Выполнение');
                 if (result?.line && this.modules.editor) {
                     this.modules.editor.addErrorMarker(result.line - 1, errorMessage);
                 }
+                this.updateExecutionProgress(0); // Сброс при ошибке
             }
         } catch (error) {
             this.log.error('Ошибка выполнения', { error: error.message });
-            this.addError(`Ошибка сети: ${error.message || 'неизвестная ошибка'}`);
+            this.addError(`Ошибка сети: ${error.message || 'неизвестная ошибка'}`, 'Выполнение');
+            this.updateExecutionProgress(0); // Сброс при ошибке
         } finally {
-            this.isExecuting = false;
+            // Небольшая задержка для плавности
+            setTimeout(() => {
+                this.isExecuting = false;
+                this.updateExecuteButtonState(false);
+                this.showExecutionIndicator(false);
+            }, 300);
         }
     }
 
+    /**
+     * Обновляет статистику выполнения
+     * @param {Object} data - Данные результата выполнения
+     * @param {number} data.execution_time - Время выполнения в секундах
+     * @param {number} [data.memory_usage] - Использование памяти в байтах (только для PHP)
+     * @returns {void}
+     * @private
+     */
     updateStatistics(data) {
         if (data.execution_time && this.domElements.executionTime) {
             const formattedTime = formatExecutionTime(data.execution_time * 1000);
@@ -389,50 +727,22 @@ export default class ConsoleManager {
         }
     }
 
+    /**
+     * Форматирует код в редакторе (заглушка)
+     * @returns {void}
+     * @example
+     * consoleManager.formatCode(); // Форматирует текущий код
+     */
     formatCode() {
         this.addInfo('Форматирование кода пока не реализовано');
     }
 
-    exportData() {
-        if (!this.modules.history) {
-            this.addError('История не доступна');
-            return;
-        }
-
-        try {
-            const historyData = this.exportHistory();
-            const dataStr = JSON.stringify(historyData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `console-history-${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            this.addSuccess(`История экспортирована (${historyData.length} записей)`);
-        } catch (error) {
-            this.addError('Ошибка экспорта истории');
-        }
-    }
-
-    showHelp() {
-        const helpText = `
-Горячие клавиши:
-• Alt+Enter - Выполнить код
-• Alt+L - Очистить консоль  
-• Alt+Shift+H - История
-• Alt+E - Экспорт
-• Alt+/ - Справка
-• Alt+Стрелки ↑/↓ - Навигация по истории
-• Alt+T - Сменить тему
-        `;
-        this.addInfo(helpText);
-    }
-
+    /**
+     * Очищает все данные: редактор, вывод, историю и состояние
+     * @returns {void}
+     * @example
+     * consoleManager.clearAll(); // Очищает все данные
+     */
     clearAll() {
         this.clearEditor();
         this.clearOutput();
@@ -441,6 +751,12 @@ export default class ConsoleManager {
         this.addSuccess('Все данные очищены');
     }
 
+    /**
+     * Уничтожает ConsoleManager и все его модули
+     * @returns {void}
+     * @example
+     * consoleManager.destroy(); // Очищает все ресурсы
+     */
     destroy() {
         this.log.info('Уничтожение ConsoleManager');
         

@@ -3,26 +3,106 @@ import {
     safeJsonParse,
     isEmpty,
     debounce,
-    formatTimestamp,
     filterByKeyword,
 } from '../utils/helpers.js';
 
+/**
+ * @typedef {Object} HistoryEntryMetadata
+ * @property {number} length - Длина команды в символах
+ * @property {number} lines - Количество строк в команде
+ * @property {*} [custom] - Пользовательские метаданные
+ */
+
+/**
+ * @typedef {Object} HistoryEntry
+ * @property {string} command - Текст команды
+ * @property {number} timestamp - Временная метка создания
+ * @property {'php' | 'sql'} consoleType - Тип консоли
+ * @property {HistoryEntryMetadata} metadata - Метаданные команды
+ */
+
+/**
+ * @typedef {Object} HistoryStats
+ * @property {number} total - Общее количество команд в истории
+ * @property {number} today - Количество команд добавленных сегодня
+ * @property {number} maxSize - Максимальный размер истории
+ * @property {'php' | 'sql'} consoleType - Тип консоли
+ * @property {number} currentPosition - Текущая позиция навигации
+ */
+
+/**
+ * @typedef {Object} CommandHistoryConfig
+ * @property {number} maxHistorySize - Максимальное количество команд в истории
+ * @property {string} storageKey - Ключ для хранения в localStorage
+ * @property {number} autoSaveDelay - Задержка автосохранения в миллисекундах
+ * @property {boolean} preserveCurrent - Сохранять ли текущую команду при навигации
+ */
+
+/**
+ * Класс для управления историей команд
+ * @class CommandHistory
+ */
 export default class CommandHistory {
+    /**
+     * Создает экземпляр истории команд
+     * @param {'php' | 'sql'} consoleType - Тип консоли
+     * @param {number} maxSize - Максимальное количество команд в истории
+     */
     constructor(consoleType, maxSize = 50) {
+        /** 
+         * Тип консоли
+         * @type {'php' | 'sql'}
+         */
         this.consoleType = consoleType;
+        
+        /** 
+         * Максимальный размер истории
+         * @type {number}
+         */
         this.maxSize = maxSize;
+        
+        /** 
+         * Массив команд истории
+         * @type {HistoryEntry[]}
+         */
         this.history = [];
+        
+        /** 
+         * Текущая позиция в истории при навигации
+         * @type {number}
+         */
         this.position = 0;
-        this.tempCommand = ''; // ДЛЯ СОХРАНЕНИЯ ТЕКУЩЕЙ КОМАНДЫ
+        
+        /** 
+         * Временное сохранение текущей команды при навигации
+         * @type {string}
+         */
+        this.tempCommand = '';
+        
+        /** 
+         * Логгер
+         * @type {Object}
+         */
         this.log = logger('CommandHistory');
+        
+        /** 
+         * Конфигурация истории
+         * @type {CommandHistoryConfig}
+         */
         this.config = {
             maxHistorySize: maxSize,
             storageKey: `consolevo_history_${consoleType}`,
             autoSaveDelay: 500,
             preserveCurrent: true
         };
+        
+        /** 
+         * Функция автосохранения с дебаунсом
+         * @type {Function}
+         */
         this.autoSave = debounce(() => this._save(), this.config.autoSaveDelay);
         
+        // Загрузка сохраненной истории
         this.load();
         
         this.log.info('Инициализирован', { 
@@ -32,7 +112,15 @@ export default class CommandHistory {
         });
     }
 
-    // ДОБАВЛЕНИЕ КОМАНДЫ С МЕТАДАННЫМИ
+    /**
+     * Добавляет команду в историю с метаданными
+     * @param {string} command - Команда для добавления
+     * @param {Object} [metadata={}] - Дополнительные метаданные
+     * @returns {boolean} true если команда добавлена, false если пропущена (дубликат или пустая)
+     * @example
+     * const history = new CommandHistory('php');
+     * history.add('echo "Hello"', { success: true, executionTime: 0.5 });
+     */
     add(command, metadata = {}) {
         if (!command || !command.trim()) {
             this.log.debug('Попытка добавить пустую команду');
@@ -50,6 +138,7 @@ export default class CommandHistory {
             return false;
         }
 
+        /** @type {HistoryEntry} */
         const historyEntry = {
             command: trimmedCommand,
             timestamp: Date.now(),
@@ -84,7 +173,12 @@ export default class CommandHistory {
         return true;
     }
 
-    // НАВИГАЦИЯ ПО ИСТОРИИ С СОХРАНЕНИЕМ ТЕКУЩЕЙ КОМАНДЫ
+    /**
+     * Получает предыдущую команду из истории
+     * @returns {string} Предыдущая команда или пустая строка если история пуста
+     * @example
+     * const prevCommand = history.getPrevious(); // Возвращает предыдущую команду
+     */
     getPrevious() {
         if (this.history.length === 0) {
             return '';
@@ -110,6 +204,12 @@ export default class CommandHistory {
         return command;
     }
 
+    /**
+     * Получает следующую команду из истории
+     * @returns {string} Следующая команда или пустая строка если достигнут конец истории
+     * @example
+     * const nextCommand = history.getNext(); // Возвращает следующую команду
+     */
     getNext() {
         if (this.history.length === 0) {
             return '';
@@ -138,12 +238,23 @@ export default class CommandHistory {
         return '';
     }
 
-    // УСТАНОВКА ТЕКУЩЕЙ КОМАНДЫ (ДЛЯ СОХРАНЕНИЯ)
+    /**
+     * Устанавливает текущую команду для временного сохранения
+     * @param {string} command - Текущая команда для сохранения
+     * @returns {void}
+     */
     setCurrentCommand(command) {
         this.tempCommand = command || '';
     }
 
-    // ПОИСК ПО ИСТОРИИ
+    /**
+     * Поиск команд в истории по ключевому слову
+     * @param {string} query - Поисковый запрос
+     * @param {number} limit - Максимальное количество результатов
+     * @returns {HistoryEntry[]} Массив найденных команд (от новых к старым)
+     * @example
+     * const results = history.search('SELECT', 5); // Поиск SQL запросов с SELECT
+     */
     search(query, limit = 10) {
         if (!query || !query.trim()) {
             return this.getRecent(limit);
@@ -160,23 +271,24 @@ export default class CommandHistory {
         return results.slice(-limit).reverse();
     }
 
-    // ПОЛУЧЕНИЕ ПОСЛЕДНИХ КОМАНД
+    /**
+     * Получает последние команды из истории
+     * @param {number} limit - Количество команд для получения
+     * @returns {HistoryEntry[]} Массив последних команд (от новых к старым)
+     * @example
+     * const recent = history.getRecent(10); // 10 последних команд
+     */
     getRecent(limit = 10) {
         return this.history.slice(-limit).reverse();
     }
 
-    // ПОЛУЧЕНИЕ ВСЕЙ ИСТОРИИ С ФИЛЬТРАЦИЕЙ
-    getAll(filterFn = null) {
-        let history = [...this.history];
-        
-        if (filterFn && typeof filterFn === 'function') {
-            history = history.filter(filterFn);
-        }
-        
-        return history.reverse(); // НОВЫЕ КОМАНДЫ ПЕРВЫМИ
-    }
-
-    // СТАТИСТИКА ИСТОРИИ
+    /**
+     * Получает статистику по истории команд
+     * @returns {HistoryStats} Статистика истории
+     * @example
+     * const stats = history.getStats();
+     * console.log(stats.total); // Общее количество команд
+     */
     getStats() {
         const today = new Date().setHours(0, 0, 0, 0);
         const todayCommands = this.history.filter(cmd => cmd.timestamp >= today);
@@ -190,49 +302,12 @@ export default class CommandHistory {
         };
     }
 
-    // ЭКСПОРТ ИСТОРИИ
-    export() {
-        const data = {
-            history: this.history,
-            exportedAt: Date.now(),
-            consoleType: this.consoleType,
-            version: '1.0'
-        };
-        
-        this.log.debug('История экспортирована', { 
-            commands: this.history.length 
-        });
-        
-        return JSON.stringify(data, null, 2);
-    }
-
-    // ИМПОРТ ИСТОРИИ
-    import(jsonString) {
-        try {
-            const data = safeJsonParse(jsonString, null);
-            if (!data || !Array.isArray(data.history)) {
-                throw new Error('Неверный формат данных истории');
-            }
-
-            let imported = 0;
-            data.history.forEach(entry => {
-                if (entry.command && entry.command.trim()) {
-                    this.add(entry.command, entry.metadata);
-                    imported++;
-                }
-            });
-
-            this.log.info('История импортирована', { 
-                commands: imported 
-            });
-            
-            return imported;
-        } catch (error) {
-            this.log.error('Ошибка импорта истории', { error: error.message });
-            return 0;
-        }
-    }
-
+    /**
+     * Очищает историю команд
+     * @returns {void}
+     * @example
+     * history.clear(); // Очищает всю историю
+     */
     clear() {
         const count = this.history.length;
         this.history = [];
@@ -246,7 +321,11 @@ export default class CommandHistory {
         });
     }
 
-    // ПРИВАТНЫЙ МЕТОД СОХРАНЕНИЯ
+    /**
+     * Приватный метод сохранения истории в localStorage
+     * @private
+     * @returns {void}
+     */
     _save() {
         try {
             const data = {
@@ -265,6 +344,10 @@ export default class CommandHistory {
         }
     }
 
+    /**
+     * Загружает историю из localStorage
+     * @returns {void}
+     */
     load() {
         try {
             const saved = localStorage.getItem(this.config.storageKey);
@@ -289,17 +372,23 @@ export default class CommandHistory {
         }
     }
 
-    // УТИЛИТЫ
+    /**
+     * Обрезает длинную команду для логов
+     * @param {string} command - Команда для обрезки
+     * @param {number} maxLength - Максимальная длина
+     * @returns {string} Обрезанная команда
+     * @private
+     */
     truncateCommand(command, maxLength = 50) {
         if (!command) return '';
         if (command.length <= maxLength) return command;
         return command.substring(0, maxLength) + '...';
     }
 
-    formatCommandTime(timestamp) {
-        return formatTimestamp(timestamp);
-    }
-
+    /**
+     * Уничтожает экземпляр истории команд
+     * @returns {void}
+     */
     destroy() {
         this.log.info('CommandHistory уничтожен', { 
             commands: this.history.length 

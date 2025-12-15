@@ -32,19 +32,52 @@ import {
  */
 
 /**
- * Класс для работы с Ace Editor с расширенным функционалом
+ * @typedef {Object} CompletionItem
+ * @property {string} name - Отображаемое имя
+ * @property {string} value - Значение для вставки
+ * @property {number} score - Приоритет (выше = лучше)
+ * @property {string} meta - Тип элемента (например, "function", "column")
+ * @property {string} [caption] - Дополнительное описание
+ * @property {string} [table] - Имя таблицы (для колонок)
+ */
+
+/**
+ * @typedef {Object} CursorPosition
+ * @property {number} row - Номер строки (0-based)
+ * @property {number} column - Номер колонки (0-based)
+ */
+
+/**
+ * @typedef {Object} EditorPreferences
+ * @property {string} [theme] - Название темы
+ * @property {string|number} [fontSize] - Размер шрифта
+ * @property {boolean} [wrapMode] - Включен ли перенос строк
+ * @property {boolean} [enableAutocomplete] - Включено ли автодополнение
+ */
+
+/**
+ * @typedef {import('ace-builds').Ace.Range} AceRange
+ */
+
+/**
+ * Класс для работы с Ace Editor
  * @class AceEditor
  */
 export default class AceEditor {
     /**
      * Создает экземпляр редактора
-     * @param {string} consoleType - Тип консоли ('php' | 'sql')
+     * @param {'php' | 'sql'} consoleType - Тип консоли
+     * @throws {Error} Если тип консоли не поддерживается
      */
     constructor(consoleType) {
-        /** @type {string} Тип консоли */
+        if (!['php', 'sql'].includes(consoleType)) {
+            throw new Error('Неподдерживаемый тип консоли. Допустимые значения: "php", "sql"');
+        }
+        
+        /** @type {'php' | 'sql'} Тип консоли */
         this.consoleType = consoleType;
         
-        /** @type {ace.Editor|null} Экземпляр Ace Editor */
+        /** @type {import('ace-builds').Ace.Editor|null} Экземпляр Ace Editor */
         this.editor = null;
         
         /** @type {Array<number>} Массив ID маркеров ошибок */
@@ -59,7 +92,7 @@ export default class AceEditor {
         /** @type {Object<string, Array<ColumnInfo>>} Структуры таблиц */
         this.tableColumns = {};
         
-        /** @type {Object|null} SQL completer */
+        /** @type {import('ace-builds').Ace.Completer|null} SQL completer */
         this.sqlCompleter = null;
         
         /** @type {Object} Логгер */
@@ -83,7 +116,7 @@ export default class AceEditor {
 
     /**
      * Инициализация редактора
-     * @returns {Promise<ace.Editor>} Экземпляр Ace Editor
+     * @returns {Promise<import('ace-builds').Ace.Editor>} Экземпляр Ace Editor
      * @throws {Error} Если Ace не загружен или элемент не найден
      */
     async init() {
@@ -101,16 +134,15 @@ export default class AceEditor {
             this.applyBaseConfig();
             this.setInitialContent();
             
-            if (this.consoleType === 'sql') {
-                await this.loadDatabaseTables();
-            }
-            
             await this.enableAdvancedFeatures();
             
             this.setupChangeListener();
             this.updateEditorInfo();
             this.isInitialized = true;
             
+            if (this.consoleType === 'sql') {
+                await this.loadDatabaseTables();
+            }
             this.log.info('Успешно инициализирован', { 
                 type: this.consoleType,
                 theme: THEMES.default,
@@ -136,6 +168,7 @@ export default class AceEditor {
 
     /**
      * Применение базовой конфигурации
+     * @returns {void}
      */
     applyBaseConfig() {
         if (!this.editor) return;
@@ -155,6 +188,7 @@ export default class AceEditor {
 
     /**
      * Установка начального содержимого
+     * @returns {void}
      */
     setInitialContent() {
         if (!this.editor) return;
@@ -188,6 +222,7 @@ export default class AceEditor {
 
     /**
      * Позиционирование курсора при инициализации
+     * @returns {void}
      */
     positionInitialCursor() {
         if (!this.editor) return;
@@ -205,6 +240,7 @@ export default class AceEditor {
 
     /**
      * Включение расширенных функций
+     * @returns {Promise<void>}
      */
     async enableAdvancedFeatures() {
         try {
@@ -289,6 +325,7 @@ export default class AceEditor {
 
     /**
      * Настройка автодополнения
+     * @returns {Promise<void>}
      */
     async setupAutocompletion() {
         if (!this.editor || typeof ace.require === 'undefined') return;
@@ -327,18 +364,26 @@ export default class AceEditor {
 
     /**
      * Настройка PHP completer с динамическими данными
+     * @param {Object} langTools - Объект language_tools из Ace Editor
+     * @returns {Promise<void>}
      */
     async setupPhpCompleter(langTools) {
         const evoCompletions = await generatePhpCompletions();
         
         const phpCompleter = {
+            /**
+             * @param {import('ace-builds').Ace.Editor} editor - Экземпляр редактора
+             * @param {import('ace-builds').Ace.EditSession} session - Сессия редактирования
+             * @param {CursorPosition} pos - Позиция курсора
+             * @param {string} prefix - Префикс для поиска
+             * @param {function(Error|null, Array<CompletionItem>)} callback - Колбэк с результатами
+             */
             getCompletions: (editor, session, pos, prefix, callback) => {
                 try {
                     const searchPrefix = prefix.toLowerCase();
                     
                     const completions = [
                         ...evoCompletions,
-                        // Базовые PHP функции
                     ].filter(comp => {
                         if (!comp || !comp.name) return false;
                         if (searchPrefix.length > 0) {
@@ -359,21 +404,9 @@ export default class AceEditor {
     }
 
     /**
-     * Проверка и отладка данных автодополнения
-     */
-    debugAutocompleteData() { 
-        // Проверяем первую таблицу
-        const firstTable = this.databaseTables[0];
-        if (firstTable) {
-            const firstTableColumns = this.tableColumns[firstTable.clean_name];
-        }
-        
-        // Проверяем completer
-        const langTools = ace.require("ace/ext/language_tools");
-    }
-
-    /**
      * Настройка SQL completer для динамических подсказок
+     * @param {Object} langTools - Объект language_tools из Ace Editor
+     * @returns {void}
      */
     setupSqlCompleter(langTools) {
         if (this.sqlCompleter) {
@@ -381,6 +414,13 @@ export default class AceEditor {
         }
 
         this.sqlCompleter = {
+            /**
+             * @param {import('ace-builds').Ace.Editor} editor - Экземпляр редактора
+             * @param {import('ace-builds').Ace.EditSession} session - Сессия редактирования
+             * @param {CursorPosition} pos - Позиция курсора
+             * @param {string} prefix - Префикс для поиска
+             * @param {function(Error|null, Array<CompletionItem>)} callback - Колбэк с результатами
+             */
             getCompletions: (editor, session, pos, prefix, callback) => {
                 try {
                     const searchPrefix = prefix.toLowerCase();
@@ -404,7 +444,6 @@ export default class AceEditor {
                     if (isAfterTableDot) {
                         // ЕСЛИ ПОСЛЕ ТОЧКИ - ТОЛЬКО КОЛОНКИ ЭТОЙ ТАБЛИЦЫ
                         const tableName = this.extractTableBeforeDot(beforeCursor);
-
                         const columnCompletions = this.getColumnCompletionsForTable(tableName);
                         completions = columnCompletions;
                         
@@ -473,7 +512,9 @@ export default class AceEditor {
     }
 
     /**
-     * Проверяем, находимся ли после точки таблицы
+     * Проверяет, находимся ли после точки таблицы
+     * @param {string} beforeCursor - Текст перед курсором
+     * @returns {boolean}
      */
     isAfterTableDot(beforeCursor) {
         // Ищем паттерн: table. или alias.
@@ -482,7 +523,9 @@ export default class AceEditor {
     }
 
     /**
-     * Извлекаем имя таблицы перед точкой
+     * Извлекает имя таблицы перед точкой
+     * @param {string} beforeCursor - Текст перед курсором
+     * @returns {string|null}
      */
     extractTableBeforeDot(beforeCursor) {
         const match = beforeCursor.match(/([\w$]+)\s*\.\s*$/);
@@ -490,7 +533,9 @@ export default class AceEditor {
     }
 
     /**
-     * Проверяем, находимся ли после SELECT
+     * Проверяет, находимся ли после SELECT
+     * @param {string} beforeCursor - Текст перед курсором
+     * @returns {boolean}
      */
     isAfterSelect(beforeCursor) {
         // Ищем паттерн: SELECT ... (без FROM после)
@@ -501,6 +546,8 @@ export default class AceEditor {
 
     /**
      * УЛУЧШЕННАЯ проверка - находимся ли после FROM
+     * @param {string} beforeCursor - Текст перед курсором
+     * @returns {boolean}
      */
     isAfterFrom(beforeCursor) {
         // Ищем паттерн: FROM ... (без другого ключевого слова после)
@@ -510,7 +557,9 @@ export default class AceEditor {
     }
 
     /**
-     * Получение колонок для конкретной таблицы
+     * Получает колонки для конкретной таблицы
+     * @param {string} tableName - Имя таблицы
+     * @returns {Array<CompletionItem>}
      */
     getColumnCompletionsForTable(tableName) {
         if (!tableName) return [];
@@ -539,6 +588,7 @@ export default class AceEditor {
      * Регистрация сниппетов
      * @param {object} snippetManager - Менеджер сниппетов Ace
      * @param {Array<Object>} snippets - Массив сниппетов
+     * @returns {void}
      */
     registerSnippets(snippetManager, snippets) {
         const snippetData = {};
@@ -559,6 +609,9 @@ export default class AceEditor {
 
     /**
      * Получение дополнений для колонок
+     * @param {import('ace-builds').Ace.EditSession} session - Сессия редактирования
+     * @param {CursorPosition} pos - Позиция курсора
+     * @returns {Array<CompletionItem>}
      */
     getColumnCompletions(session, pos) {
         const line = session.getLine(pos.row);
@@ -639,7 +692,7 @@ export default class AceEditor {
     /**
      * Получение колонок для всех таблиц в текущем запросе
      * @param {string} query - Текущий SQL запрос
-     * @returns {Array<Object>} Массив колонок
+     * @returns {Array<CompletionItem>} Массив колонок
      */
     getContextualColumnCompletions(query) {
         const usedTables = this.extractTablesFromQuery(query);
@@ -683,6 +736,7 @@ export default class AceEditor {
 
     /**
      * Настройка слушателей изменений
+     * @returns {void}
      */
     setupChangeListener() {
         if (!this.editor) return;
@@ -712,6 +766,7 @@ export default class AceEditor {
 
     /**
      * Обновление позиции курсора
+     * @returns {void}
      */
     updateCursorPosition() {
         const cursorPositionElement = document.getElementById('cursor-position');
@@ -723,6 +778,7 @@ export default class AceEditor {
 
     /**
      * Обновление информации редактора
+     * @returns {void}
      */
     updateEditorInfo() {
         this.updateCursorPosition();
@@ -731,6 +787,7 @@ export default class AceEditor {
 
     /**
      * Обновление информации о размере файла
+     * @returns {void}
      */
     updateFileSize() {
         const fileSizeElement = document.getElementById('file-size');
@@ -746,6 +803,7 @@ export default class AceEditor {
     /**
      * Обработчик изменений с дебаунсом
      * @private
+     * @returns {void}
      */
     _onChange() {
         if (!this.editor) return;
@@ -766,6 +824,7 @@ export default class AceEditor {
      * Установка содержимого редактора
      * @param {string} value - Новое содержимое
      * @param {number} cursorPosition - Позиция курсора
+     * @returns {void}
      */
     setValue(value, cursorPosition = 1) {
         if (this.editor) {
@@ -782,6 +841,7 @@ export default class AceEditor {
 
     /**
      * Очистка редактора
+     * @returns {void}
      */
     clear() {
         this.setValue('');
@@ -792,6 +852,7 @@ export default class AceEditor {
     /**
      * Изменение темы редактора
      * @param {string} themeName - Название темы Ace Editor (например, 'ace/theme/tomorrow_night')
+     * @returns {void}
      */
     setTheme(themeName) {
         try {
@@ -810,6 +871,7 @@ export default class AceEditor {
     /**
      * Включение/отключение автодополнения
      * @param {boolean} enabled - Включить автодополнение
+     * @returns {void}
      */
     toggleAutocomplete(enabled) {
         if (!this.editor) return;
@@ -826,6 +888,7 @@ export default class AceEditor {
     /**
      * Изменение размера шрифта
      * @param {number|string} size - Размер шрифта
+     * @returns {void}
      */
     changeFontSize(size) {
         if (this.editor) {
@@ -837,6 +900,7 @@ export default class AceEditor {
     /**
      * Переключение режима переноса строк
      * @param {boolean} enabled - Включить перенос строк
+     * @returns {void}
      */
     toggleWrapMode(enabled) {
         if (this.editor) {
@@ -849,6 +913,7 @@ export default class AceEditor {
      * Добавление маркера ошибки
      * @param {number} line - Номер строки (0-based)
      * @param {string} message - Сообщение об ошибке
+     * @returns {void}
      */
     addErrorMarker(line, message) {
         if (!this.editor) return;
@@ -876,6 +941,7 @@ export default class AceEditor {
 
     /**
      * Очистка маркеров ошибок
+     * @returns {void}
      */
     clearErrorMarkers() {
         if (!this.editor) return;
@@ -892,7 +958,8 @@ export default class AceEditor {
 
     /**
      * Применение настроек
-     * @param {object} preferences - Настройки редактора
+     * @param {EditorPreferences} preferences - Настройки редактора
+     * @returns {void}
      */
     applyPreferences(preferences) {
         if (!this.editor) return;
@@ -916,7 +983,7 @@ export default class AceEditor {
 
     /**
      * Получение позиции курсора для StateManager
-     * @returns {Object|null}
+     * @returns {CursorPosition|null}
      */
     getCursorPosition() {
         return this.editor ? this.editor.getCursorPosition() : null;
@@ -924,7 +991,7 @@ export default class AceEditor {
 
     /**
      * Получение выделений для StateManager
-     * @returns {Array}
+     * @returns {Array<AceRange>}
      */
     getSelections() {
         return this.editor ? this.editor.selection.getAllRanges() : [];
@@ -932,7 +999,8 @@ export default class AceEditor {
 
     /**
      * Перемещение курсора в позицию (для StateManager)
-     * @param {Object} position - Позиция {row, column}
+     * @param {CursorPosition} position - Позиция {row, column}
+     * @returns {void}
      */
     moveCursorToPosition(position) {
         if (this.editor && position) {
@@ -943,7 +1011,8 @@ export default class AceEditor {
 
     /**
      * Восстановление выделений (для StateManager)
-     * @param {Array} selections - Массив выделений
+     * @param {Array<AceRange>} selections - Массив выделений
+     * @returns {void}
      */
     restoreSelections(selections) {
         if (!this.editor || !selections || !selections.length) return;
@@ -956,6 +1025,7 @@ export default class AceEditor {
     /**
      * Установка колбэка для StateManager
      * @param {Function} callback - Функция обратного вызова StateManager
+     * @returns {void}
      */
     setStateManagerCallback(callback) {
         this.stateManagerCallback = callback;
@@ -964,6 +1034,7 @@ export default class AceEditor {
 
     /**
      * Перерисовка редактора
+     * @returns {void}
      */
     resize() {
         if (this.editor) {
@@ -974,6 +1045,7 @@ export default class AceEditor {
 
     /**
      * Уничтожение редактора
+     * @returns {void}
      */
     destroy() {
         if (this.editor) {

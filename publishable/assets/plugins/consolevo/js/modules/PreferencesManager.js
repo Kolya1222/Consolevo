@@ -3,100 +3,71 @@ import {
     logger,
     safeJsonParse,
     isEmpty,
-    debounce,
 } from '../utils/helpers.js';
 
+/**
+ * @typedef {Object} PreferenceSchema
+ * @property {string} type - Тип значения (string, number, boolean)
+ * @property {Array} [options] - Допустимые значения (для enum)
+ * @property {number} [min] - Минимальное значение (для чисел)
+ * @property {number} [max] - Максимальное значение (для чисел)
+ * @property {string} [description] - Описание настройки
+ * @property {*} [default] - Значение по умолчанию
+ */
+
+/**
+ * @typedef {Object} Preferences
+ * @property {string} theme - Тема интерфейса
+ * @property {number} fontSize - Размер шрифта
+ * @property {boolean} wrapMode - Включен ли перенос строк
+ * @property {boolean} enableAutocomplete - Включено ли автодополнение
+ */
+
+/**
+ * Менеджер для управления настройками пользователя
+ * @class PreferencesManager
+ */
 export default class PreferencesManager {
     constructor() {
-        this.storageKey = 'consolevo_preferences';
-        this.version = '1.0';
-        this.currentSchema = PREFERENCES_SCHEMA;
-        this.listeners = new Set();
-        
-        // ИСПОЛЬЗУЕМ ЛОГГЕР ИЗ HELPERS
+        /**
+         * Логгер
+         * @type {Object}
+         */
         this.log = logger('PreferencesManager');
         
-        // ДЕБАУНС ДЛЯ МАССОВОГО СОХРАНЕНИЯ
-        this.batchSave = debounce(this._batchSave.bind(this), 500);
-        this.batchUpdates = new Map();
-        
-        this.migrateIfNeeded();
-        
-        this.log.info('Инициализирован', { 
-            version: this.version,
-            storageKey: this.storageKey
-        });
+        this.log.info('Инициализирован');
     }
 
-    // МИГРАЦИЯ ДАННЫХ С ЛОГГИРОВАНИЕМ
-    migrateIfNeeded() {
-        try {
-            const stored = localStorage.getItem(this.storageKey);
-            if (!stored) {
-                this.log.debug('Нет сохраненных настроек, используются значения по умолчанию');
-                return;
-            }
-
-            // ИСПОЛЬЗУЕМ safeJsonParse ИЗ HELPERS
-            const data = safeJsonParse(stored, {});
-            
-            if (data.version !== this.version) {
-                this.log.info('Миграция настроек', { 
-                    from: data.version, 
-                    to: this.version 
-                });
-                
-                const migratedData = this.migrateData(data);
-                this.saveAll(migratedData);
-            }
-        } catch (error) {
-            this.log.error('Ошибка миграции настроек', { error: error.message });
-        }
-    }
-
-    migrateData(oldData) {
-        const migrated = { ...DEFAULT_PREFERENCES };
-        
-        Object.keys(oldData).forEach(key => {
-            if (key in migrated && this.validateValue(key, oldData[key])) {
-                migrated[key] = oldData[key];
-            }
-        });
-        
-        migrated.version = this.version;
-        
-        this.log.debug('Настройки мигрированы', {
-            migratedKeys: Object.keys(migrated).length
-        });
-        
-        return migrated;
-    }
-
-    // ЗАГРУЗКА С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК
+    /**
+     * Загружает настройки из localStorage
+     * @returns {Preferences} Объект настроек
+     * @example
+     * const prefs = preferencesManager.load();
+     * console.log(prefs.theme); // 'ace/theme/tomorrow_night'
+     * console.log(prefs.fontSize); // 14
+     */
     load() {
         try {
-            const stored = localStorage.getItem(this.storageKey);
+            const stored = localStorage.getItem('consolevo_preferences');
             if (isEmpty(stored)) {
-                return this.getDefaultPreferences();
+                return DEFAULT_PREFERENCES;
             }
 
-            // ИСПОЛЬЗУЕМ safeJsonParse ИЗ HELPERS
-            const preferences = safeJsonParse(stored, this.getDefaultPreferences());
+            const preferences = safeJsonParse(stored, DEFAULT_PREFERENCES);
             return this.validateAndMerge(preferences);
             
         } catch (error) {
             this.log.error('Ошибка загрузки настроек', { error: error.message });
-            return this.getDefaultPreferences();
+            return DEFAULT_PREFERENCES;
         }
     }
 
-    getDefaultPreferences() {
-        return {
-            ...DEFAULT_PREFERENCES,
-            version: this.version
-        };
-    }
-
+    /**
+     * Валидирует и объединяет настройки с значениями по умолчанию
+     * @param {Object} preferences - Загруженные настройки
+     * @returns {Preferences} Валидированные настройки
+     * @private
+     */
     validateAndMerge(preferences) {
         const validated = { ...DEFAULT_PREFERENCES };
         let validCount = 0;
@@ -108,8 +79,6 @@ export default class PreferencesManager {
             }
         });
         
-        validated.version = this.version;
-        
         this.log.debug('Настройки валидированы', {
             total: Object.keys(preferences).length,
             valid: validCount
@@ -118,15 +87,22 @@ export default class PreferencesManager {
         return validated;
     }
 
+    /**
+     * Валидирует значение для указанного ключа настроек
+     * @param {string} key - Ключ настройки
+     * @param {*} value - Значение для проверки
+     * @returns {boolean} true если значение валидно
+     * @private
+     */
     validateValue(key, value) {
-        const schema = this.currentSchema[key];
+        const schema = PREFERENCES_SCHEMA[key];
         if (!schema) {
             this.log.warn('Неизвестная настройка', { key, value });
             return false;
         }
 
+        // Преобразование строки в число для fontSize
         if (key === 'fontSize' && typeof value === 'string') {
-            // Парсим '16px' -> 16
             const parsed = parseInt(value);
             if (!isNaN(parsed)) {
                 value = parsed;
@@ -135,56 +111,52 @@ export default class PreferencesManager {
 
         // Проверка типа
         if (schema.type && typeof value !== schema.type) {
-            this.log.warn('Неверный тип настройки', { 
-                key, 
-                expected: schema.type, 
-                actual: typeof value 
-            });
             return false;
         }
 
         // Проверка допустимых значений
         if (schema.options && !schema.options.includes(value)) {
-            this.log.warn('Недопустимое значение настройки', { 
-                key, 
-                value, 
-                allowed: schema.options 
-            });
             return false;
         }
 
         // Проверка диапазона для чисел
         if (schema.type === 'number' && schema.min !== undefined && value < schema.min) {
-            this.log.warn('Значение настройки слишком мало', { 
-                key, 
-                value, 
-                min: schema.min 
-            });
             return false;
         }
 
         if (schema.type === 'number' && schema.max !== undefined && value > schema.max) {
-            this.log.warn('Значение настройки слишком велико', { 
-                key, 
-                value, 
-                max: schema.max 
-            });
             return false;
         }
 
         return true;
     }
 
-    //  СОХРАНЕНИЕ
+    /**
+     * Сохраняет настройку
+     * @param {keyof Preferences} key - Ключ настройки
+     * @param {*} value - Значение настройки
+     * @returns {boolean} true если настройка сохранена успешно
+     * @example
+     * // Сохранение темы
+     * preferencesManager.save('theme', 'ace/theme/tomorrow_night');
+     * 
+     * // Сохранение размера шрифта
+     * preferencesManager.save('fontSize', 16);
+     * 
+     * // Сохранение режима переноса строк
+     * preferencesManager.save('wrapMode', true);
+     */
     save(key, value) {
         try {
-            
+            // Преобразование строки в число для fontSize
             if (key === 'fontSize' && typeof value === 'string') {
                 const parsed = parseInt(value);
                 if (!isNaN(parsed)) {
                     value = parsed;
                 }
             }
+            
+            // Валидация значения
             if (!this.validateValue(key, value)) {
                 this.log.error('Некорректное значение для сохранения', { key, value });
                 return false;
@@ -193,19 +165,16 @@ export default class PreferencesManager {
             const preferences = this.load();
             const oldValue = preferences[key];
             
-            //  ПРОВЕРКА ИЗМЕНЕНИЯ С isEmpty
-            if (oldValue === value || (isEmpty(oldValue) && isEmpty(value))) {
-                this.log.debug('Значение не изменилось, пропускаем сохранение', { key });
+            // Если значение не изменилось, не сохраняем
+            if (oldValue === value) {
                 return true;
             }
 
+            // Сохраняем новое значение
             preferences[key] = value;
-            localStorage.setItem(this.storageKey, JSON.stringify(preferences));
+            localStorage.setItem('consolevo_preferences', JSON.stringify(preferences));
             
             this.log.debug('Настройка сохранена', { key, value });
-            
-            // Уведомляем слушателей
-            this.notifyListeners(key, value, oldValue);
             
             return true;
         } catch (error) {
@@ -214,109 +183,40 @@ export default class PreferencesManager {
         }
     }
 
-    saveBatch(key, value) {
-        this.batchUpdates.set(key, value);
-        this.batchSave();
-    }
-
-    _batchSave() {
-        if (this.batchUpdates.size === 0) return;
-
-        try {
-            const preferences = this.load();
-            const changes = [];
-
-            this.batchUpdates.forEach((value, key) => {
-                if (this.validateValue(key, value)) {
-                    const oldValue = preferences[key];
-                    if (oldValue !== value) {
-                        preferences[key] = value;
-                        changes.push({ key, value, oldValue });
-                    }
-                }
-            });
-
-            if (changes.length > 0) {
-                localStorage.setItem(this.storageKey, JSON.stringify(preferences));
-                
-                this.log.debug('Пакетное сохранение настроек', { 
-                    changes: changes.length 
-                });
-                
-                // Уведомляем слушателей об изменениях
-                changes.forEach(({ key, value, oldValue }) => {
-                    this.notifyListeners(key, value, oldValue);
-                });
-            }
-
-            this.batchUpdates.clear();
-        } catch (error) {
-            this.log.error('Ошибка пакетного сохранения', { error: error.message });
-        }
-    }
-
-    saveAll(newPreferences) {
-        try {
-            const validated = this.validateAndMerge(newPreferences);
-            localStorage.setItem(this.storageKey, JSON.stringify(validated));
-            
-            this.log.info('Все настройки сохранены', {
-                total: Object.keys(validated).length
-            });
-            
-            this.notifyListeners('*', validated, null);
-            
-            return true;
-        } catch (error) {
-            this.log.error('Ошибка массового сохранения настроек', { error: error.message });
-            return false;
-        }
-    }
-
+    /**
+     * Получает значение настройки
+     * @param {keyof Preferences} key - Ключ настройки
+     * @param {*} [defaultValue=null] - Значение по умолчанию если настройка не найдена
+     * @returns {*} Значение настройки или значение по умолчанию
+     * @example
+     * const theme = preferencesManager.get('theme'); // Получает тему
+     * const fontSize = preferencesManager.get('fontSize', 14); // Получает размер шрифта с дефолтом
+     */
     get(key, defaultValue = null) {
         const preferences = this.load();
         return preferences[key] ?? defaultValue;
     }
 
-    addListener(callback) {
-        this.listeners.add(callback);
-        
-        this.log.debug('Слушатель добавлен', { 
-            totalListeners: this.listeners.size 
-        });
-        
-        return () => {
-            this.listeners.delete(callback);
-            this.log.debug('Слушатель удален', { 
-                totalListeners: this.listeners.size 
-            });
-        };
+    /**
+     * Получает все настройки
+     * @returns {Preferences} Все настройки
+     * @example
+     * const allPrefs = preferencesManager.getAll();
+     */
+    getAll() {
+        return this.load();
     }
 
-    notifyListeners(key, newValue, oldValue) {
-        this.log.debug('Уведомление слушателей', { 
-            key, 
-            listeners: this.listeners.size 
-        });
-        
-        this.listeners.forEach(callback => {
-            try {
-                callback(key, newValue, oldValue);
-            } catch (error) {
-                this.log.error('Ошибка в слушателе настроек', { error: error.message });
-            }
-        });
-    }
-
+    /**
+     * Очищает все настройки (возвращает к значениям по умолчанию)
+     * @returns {boolean} true если настройки успешно очищены
+     * @example
+     * preferencesManager.clear(); // Удаляет все пользовательские настройки
+     */
     clear() {
         try {
-            const oldPreferences = this.load();
-            localStorage.removeItem(this.storageKey);
-            
+            localStorage.removeItem('consolevo_preferences');
             this.log.info('Все настройки очищены');
-            
-            this.notifyListeners('*', this.getDefaultPreferences(), oldPreferences);
-            
             return true;
         } catch (error) {
             this.log.error('Ошибка очистки настроек', { error: error.message });
@@ -324,9 +224,101 @@ export default class PreferencesManager {
         }
     }
 
+    /**
+     * Сохраняет несколько настроек одновременно
+     * @param {Object} updates - Объект с обновлениями настроек
+     * @returns {boolean} true если все настройки сохранены успешно
+     * @example
+     * preferencesManager.saveMultiple({
+     *   theme: 'ace/theme/tomorrow_night',
+     *   fontSize: 16,
+     *   wrapMode: true
+     * });
+     */
+    saveMultiple(updates) {
+        try {
+            const preferences = this.load();
+            let hasChanges = false;
+            
+            // Применяем все обновления
+            Object.entries(updates).forEach(([key, value]) => {
+                if (this.validateValue(key, value)) {
+                    if (preferences[key] !== value) {
+                        preferences[key] = value;
+                        hasChanges = true;
+                    }
+                } else {
+                    this.log.warn('Пропущена невалидная настройка', { key, value });
+                }
+            });
+            
+            // Сохраняем только если были изменения
+            if (hasChanges) {
+                localStorage.setItem('consolevo_preferences', JSON.stringify(preferences));
+                this.log.debug('Несколько настроек сохранены', {
+                    updates: Object.keys(updates).length
+                });
+            }
+            
+            return true;
+        } catch (error) {
+            this.log.error('Ошибка сохранения нескольких настроек', { error: error.message });
+            return false;
+        }
+    }
+
+    /**
+     * Проверяет, есть ли сохраненные настройки
+     * @returns {boolean} true если есть сохраненные настройки
+     * @example
+     * const hasPrefs = preferencesManager.hasSavedPreferences();
+     */
+    hasSavedPreferences() {
+        const stored = localStorage.getItem('consolevo_preferences');
+        return !isEmpty(stored);
+    }
+
+    /**
+     * Экспортирует настройки как строку JSON
+     * @returns {string} JSON строка с настройками
+     * @example
+     * const json = preferencesManager.exportAsJson();
+     * console.log(json); // '{"theme":"ace/theme/tomorrow_night","fontSize":14,...}'
+     */
+    exportAsJson() {
+        const preferences = this.load();
+        return JSON.stringify(preferences, null, 2);
+    }
+
+    /**
+     * Импортирует настройки из JSON строки
+     * @param {string} json - JSON строка с настройками
+     * @returns {boolean} true если настройки успешно импортированы
+     * @example
+     * const success = preferencesManager.importFromJson('{"theme":"ace/theme/monokai"}');
+     */
+    importFromJson(json) {
+        try {
+            const parsed = safeJsonParse(json, null);
+            if (!parsed || typeof parsed !== 'object') {
+                this.log.error('Некорректный JSON для импорта');
+                return false;
+            }
+            
+            return this.saveMultiple(parsed);
+        } catch (error) {
+            this.log.error('Ошибка импорта настроек', { error: error.message });
+            return false;
+        }
+    }
+
+    /**
+     * Уничтожает менеджер настроек
+     * @returns {void}
+     * @example
+     * preferencesManager.destroy(); // Очищает ресурсы
+     */
     destroy() {
         this.log.info('PreferencesManager уничтожен');
-        this.listeners.clear();
-        this.batchUpdates.clear();
     }
 }

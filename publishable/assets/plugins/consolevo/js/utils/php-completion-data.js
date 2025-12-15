@@ -117,7 +117,6 @@ export const EVO_SAFE_FUNCTIONS = [
     'setCache', 'getCache', 'deleteCache'
 ];
 
-// ОДИН раз объявляем EVO_QUICK_SNIPPETS
 export const EVO_QUICK_SNIPPETS = [
     {
         name: 'get_document_info',

@@ -2,10 +2,46 @@ import { API_CONFIG } from '../utils/constants.js';
 import { 
     getCsrfToken, 
     logger, 
-    safeJsonParse, 
-    debounce,
+    safeJsonParse,
     formatExecutionTime,
 } from '../utils/helpers.js';
+
+/**
+ * @typedef {Object} ExecuteOptions
+ * @property {number} [timeout] - Таймаут запроса в миллисекундах
+ * @property {number} [retries] - Количество повторов при ошибках
+ * @property {(progress: string) => void} [onProgress] - Колбэк для уведомлений о прогрессе
+ */
+
+/**
+ * @typedef {Object} PhpExecutionResult
+ * @property {boolean} success - Статус выполнения
+ * @property {string} output - Вывод кода
+ * @property {*} [result] - Результат выполнения (если есть)
+ * @property {string} [error] - Сообщение об ошибке
+ * @property {number} [line] - Номер строки с ошибкой
+ * @property {number} execution_time - Время выполнения в секундах
+ * @property {number} memory_usage - Использование памяти в байтах
+ */
+
+/**
+ * @typedef {Object} SqlExecutionResult
+ * @property {boolean} success - Статус выполнения запроса
+ * @property {Array<Object>} [data] - Результирующие данные
+ * @property {number} [count] - Количество строк
+ * @property {number} [affected_rows] - Количество затронутых строк
+ * @property {number} execution_time - Время выполнения в секундах
+ * @property {string} [error] - Сообщение об ошибке SQL
+ * @property {number} [line] - Номер строки с ошибкой
+ */
+
+/**
+ * @typedef {Object} HtmlError
+ * @property {string} htmlContent - HTML содержимое ошибки
+ * @property {boolean} isHtmlError - Флаг HTML ошибки
+ * @property {number} status - HTTP статус код
+ * @property {number} [attempts] - Количество попыток
+ */
 
 /**
  * Клиент для выполнения API запросов к серверу выполнения кода
@@ -15,7 +51,7 @@ export default class ApiClient {
     /**
      * Создает экземпляр API клиента
      * @param {string} executeRoute - URL для выполнения кода
-     * @param {string} consoleType - Тип консоли ('php' | 'sql')
+     * @param {'php' | 'sql'} consoleType - Тип консоли
      */
     constructor(executeRoute, consoleType) {
         /**
@@ -26,7 +62,7 @@ export default class ApiClient {
         
         /**
          * Тип консоли
-         * @type {string}
+         * @type {'php' | 'sql'}
          */
         this.consoleType = consoleType;
         
@@ -48,23 +84,15 @@ export default class ApiClient {
          */
         this.retryDelay = API_CONFIG.retryDelay || 1000;
         
-        // ИНИЦИАЛИЗАЦИЯ ЛОГГЕРА
+        /** 
+         * Логгер
+         * @type {Object}
+         * @property {Function} debug - Метод отладки
+         * @property {Function} info - Метод информации
+         * @property {Function} warn - Метод предупреждения
+         * @property {Function} error - Метод ошибки
+         */
         this.log = logger('ApiClient');
-        
-        /**
-         * История запросов для аналитики
-         * @type {Array}
-         */
-        this.requestHistory = [];
-        
-        /**
-         * Максимальный размер истории
-         * @type {number}
-         */
-        this.maxHistorySize = 50;
-        
-        // ДЕБАУНС ДЛЯ ОПТИМИЗАЦИИ ЛОГГИНГА
-        this.logRequest = debounce(this._logRequest.bind(this), 500);
         
         this.log.info('API клиент инициализирован', { 
             route: executeRoute, 
@@ -74,40 +102,18 @@ export default class ApiClient {
     }
 
     /**
-     * @typedef {Object} ExecuteOptions
-     * @property {number} [timeout] - Таймаут запроса в миллисекундах
-     * @property {number} [retries] - Количество повторов при ошибках
-     * @property {function(string): void} [onProgress] - Колбэк для уведомлений о прогрессе
-     */
-
-    /**
-     * @typedef {Object} PhpExecutionResult
-     * @property {boolean} success - Статус выполнения
-     * @property {string} output - Вывод кода
-     * @property {*} [result] - Результат выполнения (если есть)
-     * @property {string} [error] - Сообщение об ошибке
-     * @property {number} [line] - Номер строки с ошибкой
-     * @property {number} execution_time - Время выполнения в секундах
-     * @property {number} memory_usage - Использование памяти в байтах
-     */
-
-    /**
-     * @typedef {Object} SqlExecutionResult
-     * @property {boolean} success - Статус выполнения запроса
-     * @property {Array<Object>} [data] - Результирующие данные
-     * @property {number} [count] - Количество строк
-     * @property {number} [affected_rows] - Количество затронутых строк
-     * @property {number} execution_time - Время выполнения в секундах
-     * @property {string} [error] - Сообщение об ошибке SQL
-     * @property {number} [line] - Номер строки с ошибкой
-     */
-
-    /**
      * Выполняет код на сервере
      * @async
      * @param {string} code - Код для выполнения
      * @param {ExecuteOptions} [options] - Дополнительные опции выполнения
      * @returns {Promise<PhpExecutionResult|SqlExecutionResult>} Результат выполнения
+     * @throws {Error} Если произошла ошибка выполнения запроса
+     * @example
+     * // Выполнение PHP кода
+     * const result = await apiClient.execute('echo "Hello";');
+     * 
+     * // Выполнение SQL запроса
+     * const result = await apiClient.execute('SELECT * FROM users');
      */
     async execute(code, options = {}) {
         const {
@@ -128,15 +134,6 @@ export default class ApiClient {
         try {
             const response = await this.makeRequest(payload, timeout, retries, onProgress);
             const validatedResponse = this.validateResponse(response);
-            
-            const duration = performance.now() - startTime;
-            
-            this.logRequest({
-                type: this.consoleType,
-                success: true,
-                duration,
-                attempts: 1
-            });
 
             return validatedResponse;
             
@@ -149,8 +146,7 @@ export default class ApiClient {
                     htmlLength: error.htmlContent?.length 
                 });
                 
-                // Создаем структурированный ответ с HTML ошибкой
-                const htmlErrorResult = {
+                return {
                     success: false,
                     output: error.htmlContent,
                     error: 'Evolution CMS Error',
@@ -158,32 +154,22 @@ export default class ApiClient {
                     memory_usage: 0,
                     isHtmlError: true
                 };
-                
-                this.logRequest({
-                    type: this.consoleType,
-                    success: false,
-                    duration,
-                    error: 'Evolution CMS HTML Error',
-                    attempts: error.attempts || 1
-                });
-
-                return htmlErrorResult;
             }
-            
-            this.logRequest({
-                type: this.consoleType,
-                success: false,
-                duration,
-                error: error.message,
-                attempts: error.attempts || 1
-            });
 
             this.log.error('Ошибка выполнения API запроса', { 
                 error: error.message,
                 duration: formatExecutionTime(duration)
             });
 
-            throw this.normalizeError(error);
+            return {
+                success: false,
+                output: '',
+                result: null,
+                error: error.message,
+                line: null,
+                execution_time: duration / 1000,
+                memory_usage: 0
+            };
         }
     }
 
@@ -191,6 +177,7 @@ export default class ApiClient {
      * Строит payload для запроса
      * @param {string} code - Код для выполнения
      * @returns {Object} Объект payload
+     * @private
      */
     buildPayload(code) {
         const basePayload = {
@@ -214,16 +201,19 @@ export default class ApiClient {
     }
 
     /**
-     * Выполняет HTTP запрос с повторами
+     * Выполняет HTTP запрос с умными повторами
      * @async
      * @param {Object} payload - Данные запроса
-     * @param {number} timeout - Таймаут
-     * @param {number} maxRetries - Максимум повторов
-     * @param {Function} onProgress - Колбэк прогресса
+     * @param {number} timeout - Таймаут в миллисекундах
+     * @param {number} maxRetries - Максимальное количество повторов
+     * @param {Function} [onProgress] - Колбэк прогресса
      * @returns {Promise<Object>} Ответ сервера
+     * @private
+     * @throws {Error} Если все попытки запроса завершились неудачей
      */
     async makeRequest(payload, timeout, maxRetries, onProgress) {
-        let lastError;
+        /** @type {Error|HtmlError|null} */
+        let lastError = null;
         let attempts = 0;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -254,7 +244,19 @@ export default class ApiClient {
                 clearTimeout(timeoutId);
 
                 if (!response.ok) {
-                    throw await this.parseErrorResponse(response);
+                    const error = await this.parseErrorResponse(response);
+                    
+                    // ПРОВЕРКА: СТОИТ ЛИ ПОВТОРЯТЬ ЗАПРОС?
+                    if (!this.shouldRetry(error, response.status)) {
+                        this.log.warn('Ошибка кода - не повторяем запрос', { 
+                            error: error.message, 
+                            status: response.status 
+                        });
+                        throw error;
+                    }
+                    
+                    // Если ошибка временная - продолжаем цикл попыток
+                    throw error;
                 }
 
                 const responseData = await response.text();
@@ -266,17 +268,28 @@ export default class ApiClient {
                 
                 // ОБРАБОТКА HTML ОШИБОК - НЕ ПОВТОРЯЕМ ЗАПРОС
                 if (error.isHtmlError) {
-                    this.log.warn('🔄 HTML ошибка Evolution CMS - пропускаем повторные попытки', { 
+                    this.log.warn('HTML ошибка Evolution CMS - пропускаем повторные попытки', { 
                         status: error.status
                     });
                     throw error;
                 }
                 
+                // Ошибки таймаута МОЖНО повторять
                 if (error.name === 'AbortError') {
                     this.log.warn('Таймаут запроса', { attempt, timeout });
-                    throw new Error(`Таймаут запроса (${timeout}ms)`);
+                    if (attempt < maxRetries) {
+                        await this.delay(this.retryDelay * attempt);
+                        continue;
+                    }
+                    throw new Error(`Таймаут запроса (${timeout}ms) после ${attempt} попыток`);
+                }
+                
+                // Если shouldRetry уже определил, что повторять не нужно
+                if (error.noRetry) {
+                    throw error;
                 }
 
+                // Все остальные ошибки - пробуем повторить
                 if (attempt < maxRetries) {
                     this.log.warn(`Попытка ${attempt} не удалась`, { 
                         error: error.message,
@@ -291,10 +304,62 @@ export default class ApiClient {
     }
 
     /**
+     * Определяет, стоит ли повторять запрос при данной ошибке
+     * @param {Error} error - Объект ошибки
+     * @param {number} statusCode - HTTP статус код
+     * @returns {boolean} true - если запрос стоит повторить
+     * @private
+     */
+    shouldRetry(error, statusCode) {
+        // Список HTTP статусов, при которых НЕ нужно повторять запрос
+        const noRetryStatuses = [400, 422, 500];
+        
+        // Проверяем сообщение об ошибке на признаки ошибки КОДА (не сервера)
+        const errorMessage = error.message.toLowerCase();
+        const codeErrorIndicators = [
+            'syntax error',
+            'parse error',
+            'undefined function',
+            'too few arguments',
+            'too many arguments',
+            'expects parameter',
+            'unexpected',
+            'invalid',
+            'call to undefined',
+            'class not found'
+        ];
+        
+        // Если HTTP статус говорит об ошибке клиента/кода
+        if (noRetryStatuses.includes(statusCode)) {
+            // Проверяем, не является ли это временной ошибкой сервера
+            // (иногда 500 может быть временным)
+            if (statusCode === 500) {
+                // Для 500 проверяем текст ошибки
+                for (const indicator of codeErrorIndicators) {
+                    if (errorMessage.includes(indicator)) {
+                        error.noRetry = true; // Помечаем, что не нужно повторять
+                        return false;
+                    }
+                }
+                // Если это не ошибка кода, возможно, временная проблема сервера
+                // Можно повторить (но с осторожностью)
+                return true;
+            }
+            // Для 400 и 422 явно не повторяем
+            error.noRetry = true;
+            return false;
+        }
+        
+        // Сетевые ошибки, таймауты, 5xx (кроме определенных выше) - повторяем
+        return true;
+    }
+
+    /**
      * Парсит ошибку из ответа сервера
      * @async
      * @param {Response} response - Объект Response
-     * @returns {Promise<Error>} Объект ошибки
+     * @returns {Promise<Error|HtmlError>} Объект ошибки или HTML ошибки
+     * @private
      */
     async parseErrorResponse(response) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -311,10 +376,14 @@ export default class ApiClient {
                 
                 // Создаем специальную ошибку с HTML содержимым
                 const htmlError = new Error('Evolution CMS HTML Error');
-                htmlError.htmlContent = errorData;
-                htmlError.isHtmlError = true;
-                htmlError.status = response.status;
-                throw htmlError;
+                /** @type {HtmlError} */
+                const enhancedError = Object.assign(htmlError, {
+                    htmlContent: errorData,
+                    isHtmlError: true,
+                    status: response.status
+                });
+                
+                throw enhancedError;
             }
             
             if (errorData) {
@@ -330,7 +399,6 @@ export default class ApiClient {
             if (parseError.isHtmlError) {
                 throw parseError;
             }
-            // Используем стандартное сообщение если парсинг не удался
         }
         
         return new Error(errorMessage);
@@ -341,6 +409,7 @@ export default class ApiClient {
      * @param {Object} response - Ответ сервера
      * @returns {PhpExecutionResult|SqlExecutionResult} Валидированный ответ
      * @throws {Error} Если ответ некорректен
+     * @private
      */
     validateResponse(response) {
         if (!response || typeof response !== 'object') {
@@ -387,161 +456,20 @@ export default class ApiClient {
     }
 
     /**
-     * @typedef {Object} NormalizedError
-     * @property {boolean} success - Всегда false для ошибок
-     * @property {string} error - Сообщение об ошибке
-     * @property {'timeout'|'network'|'http'|'unknown'} type - Тип ошибки
-     * @property {number} attempts - Количество попыток выполнения
-     */
-
-    /**
-     * Нормализует ошибку для единообразной обработки
-     * @param {Error} error - Исходная ошибка
-     * @returns {NormalizedError} Нормализованный объект ошибки
-     */
-    normalizeError(error) {
-        const normalized = {
-            success: false,
-            error: error.message || 'Неизвестная ошибка',
-            type: 'unknown',
-            attempts: error.attempts || 1
-        };
-
-        if (error.name === 'AbortError') {
-            normalized.error = 'Превышено время ожидания ответа от сервера';
-            normalized.type = 'timeout';
-        } else if (error.message.includes('Failed to fetch')) {
-            normalized.error = 'Ошибка сети: невозможно подключиться к серверу';
-            normalized.type = 'network';
-        } else if (error.message.includes('HTTP')) {
-            normalized.error = `Ошибка сервера: ${error.message}`;
-            normalized.type = 'http';
-        }
-
-        return normalized;
-    }
-
-    /**
      * Создает задержку
      * @param {number} ms - Время задержки в миллисекундах
-     * @returns {Promise} Promise который разрешится после задержки
+     * @returns {Promise<void>} Promise который разрешится после задержки
+     * @private
      */
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**
-     * @typedef {Object} RequestLogData
-     * @property {string} type - Тип консоли
-     * @property {boolean} success - Статус выполнения
-     * @property {number} duration - Длительность выполнения в ms
-     * @property {number} attempts - Количество попыток
-     * @property {string} [error] - Сообщение об ошибке (если есть)
-     */
-
-    /**
-     * Логирует запрос в историю (с дебаунсом)
-     * @private
-     * @param {RequestLogData} requestData - Данные запроса для логирования
-     */
-    _logRequest(requestData) {
-        this.requestHistory.unshift(requestData);
-        
-        if (this.requestHistory.length > this.maxHistorySize) {
-            this.requestHistory = this.requestHistory.slice(0, this.maxHistorySize);
-        }
-        
-        this.log.debug('Запрос завершен и залогирован', requestData);
-    }
-
-    /**
-     * Тестирует соединение с сервером
-     * @async
-     * @returns {Promise<boolean>} Результат теста
-     */
-    async testConnection() {
-        try {
-            const response = await fetch(this.executeRoute, {
-                method: 'HEAD',
-                headers: {
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-            return response.ok;
-        } catch (error) {
-            this.log.error('Ошибка тестирования соединения', { error: error.message });
-            return false;
-        }
-    }
-
-    /**
-     * Получает информацию о клиенте
-     * @returns {Object} Информация о клиенте
-     */
-    getRequestInfo() {
-        return {
-            route: this.executeRoute,
-            consoleType: this.consoleType,
-            timeout: this.requestTimeout,
-            maxRetries: this.maxRetries,
-            recentRequests: this.requestHistory.length
-        };
-    }
-
-    /**
-     * @typedef {Object} PerformanceStats
-     * @property {number} total - Общее количество запросов
-     * @property {number} successful - Количество успешных запросов
-     * @property {number} failed - Количество неудачных запросов
-     * @property {string} successRate - Процент успешных запросов
-     * @property {string} avgDuration - Средняя длительность выполнения
-     */
-
-    /**
-     * Получает статистику производительности
-     * @returns {PerformanceStats} Статистика производительности
-     */
-    getPerformanceStats() {
-        const successful = this.requestHistory.filter(req => req.success);
-        const failed = this.requestHistory.filter(req => !req.success);
-        
-        return {
-            total: this.requestHistory.length,
-            successful: successful.length,
-            failed: failed.length,
-            successRate: this.requestHistory.length ? 
-                (successful.length / this.requestHistory.length * 100).toFixed(1) + '%' : '0%',
-            avgDuration: successful.length ? 
-                formatExecutionTime(successful.reduce((sum, req) => sum + req.duration, 0) / successful.length) : '0ms'
-        };
-    }
-
-    /**
-     * Обновляет конфигурацию клиента
-     * @param {Object} newConfig - Новая конфигурация
-     */
-    updateConfig(newConfig) {
-        if (newConfig.timeout) this.requestTimeout = newConfig.timeout;
-        if (newConfig.maxRetries) this.maxRetries = newConfig.maxRetries;
-        if (newConfig.retryDelay) this.retryDelay = newConfig.retryDelay;
-        
-        this.log.info('Конфигурация API клиента обновлена', newConfig);
-    }
-
-    /**
-     * Очищает историю запросов
-     */
-    clearHistory() {
-        this.requestHistory = [];
-        this.log.info('История запросов API очищена');
-    }
-
-    /**
      * Уничтожает клиент и освобождает ресурсы
+     * @returns {void}
      */
     destroy() {
         this.log.info('API клиент уничтожен');
-        this.requestHistory = [];
     }
 }

@@ -126,5 +126,4 @@ export const PROMPT_SYMBOLS = {
     success: { symbol: '<i class="fas fa-check-circle"></i>', class: 'prompt-success', isHtml: true },
     warning: { symbol: '<i class="fas fa-exclamation-triangle"></i>', class: 'prompt-warning', isHtml: true },
     error: { symbol: '<i class="fas fa-times-circle"></i>', class: 'prompt-error', isHtml: true },
-    input: { symbol: '<i class="fas fa-keyboard"></i>', class: 'prompt-input', isHtml: true }
 };

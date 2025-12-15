@@ -12,18 +12,54 @@ import {
 } from '../utils/helpers.js';
 
 /**
+ * @typedef {Object} EvolutionErrorInfo
+ * @property {string} title - Заголовок ошибки
+ * @property {string} message - Сообщение об ошибке
+ * @property {string} [sqlError] - SQL ошибка (если есть)
+ * @property {Object<string, string>} [benchmarks] - Бенчмарки
+ * @property {string[]} [backtrace] - Backtrace
+ * @property {number} timestamp - Временная метка
+ */
+
+/**
+ * @typedef {Object} ContentAnalysis
+ * @property {boolean} isHtml - Является ли контент HTML
+ * @property {boolean} isEvolutionError - Является ли ошибкой Evolution CMS
+ * @property {boolean} isSqlError - Является ли SQL ошибкой
+ * @property {'text'|'evolution-error'|'html'} contentType - Тип контента
+ */
+
+/**
+ * @typedef {Object} PhpResultData
+ * @property {boolean} success - Статус выполнения
+ * @property {string} output - Вывод кода
+ * @property {*} result - Результат выполнения
+ * @property {number} execution_time - Время выполнения в секундах
+ * @property {number} memory_usage - Использование памяти в байтах
+ */
+
+/**
+ * @typedef {Object} SqlResultData
+ * @property {boolean} success - Статус выполнения
+ * @property {Array<Object>} [data] - Результирующие данные
+ * @property {number} [count] - Количество строк
+ * @property {number} [affected_rows] - Количество затронутых строк
+ * @property {number} execution_time - Время выполнения в секундах
+ */
+
+/**
  * Менеджер вывода консоли - отвечает за отображение сообщений, результатов и управление историей вывода
  * @class OutputManager
  */
 export default class OutputManager {
     /**
      * Создает экземпляр менеджера вывода
-     * @param {string} consoleType - Тип консоли ('php' | 'sql')
+     * @param {'php' | 'sql'} consoleType - Тип консоли
      */
     constructor(consoleType) {
         /**
          * Тип консоли
-         * @type {string}
+         * @type {'php' | 'sql'}
          */
         this.consoleType = consoleType;
         
@@ -47,7 +83,7 @@ export default class OutputManager {
         
         /**
          * Логгер для отладки
-         * @type {Function}
+         * @type {Object}
          */
         this.log = logger('OutputManager');
         
@@ -76,6 +112,20 @@ export default class OutputManager {
     }
 
     /**
+     * Показывает начальные сообщения из данных элемента
+     * @param {Array<{message: string, type?: string}>} messages - Массив сообщений
+     * @returns {void}
+     * @private
+     */
+    showInitialMessages(messages) {
+        if (!Array.isArray(messages)) return;
+        
+        messages.forEach(msg => {
+            this.add(msg.message, msg.type || 'info');
+        });
+    }
+
+    /**
      * Показывает приветственное сообщение в зависимости от типа консоли
      * @returns {void}
      */
@@ -85,16 +135,9 @@ export default class OutputManager {
                 'PHP консоль готова к работе. Введите код для выполнения.', 
                 'info'
             );
-            
-            const welcomeLine2 = this.createOutputLine(
-                'Для выполнения кода нажмите Alt+Enter или кнопку "Выполнить".', 
-                'info'
-            );
-            
             this.outputElement.innerHTML = '';
             this.outputElement.appendChild(welcomeLine1);
-            this.outputElement.appendChild(welcomeLine2);
-            this.currentLines = 2;
+            this.currentLines = 1;
         } else {
             this.add('SQL консоль готова к работе. Введите запрос для выполнения.', 'info');
         }
@@ -103,9 +146,12 @@ export default class OutputManager {
     /**
      * Добавляет сообщение в вывод консоли
      * @param {string} message - Текст сообщения
-     * @param {string} [type='info'] - Тип сообщения ('info' | 'success' | 'warning' | 'error' | 'input')
+     * @param {'info' | 'success' | 'warning' | 'error' } [type='info'] - Тип сообщения
      * @param {boolean} [isHtml=false] - Является ли сообщение HTML
      * @returns {void}
+     * @example
+     * output.add('Команда выполнена', 'success');
+     * output.add('<b>Внимание</b>', 'warning', true);
      */
     add(message, type = 'info', isHtml = false) {
         if (!this.outputElement) {
@@ -144,43 +190,27 @@ export default class OutputManager {
      * @param {string} type - Тип сообщения
      * @param {boolean} isHtml - Является ли сообщение HTML
      * @returns {HTMLElement} DOM элемент строки
+     * @private
      */
     createOutputLine(message, type, isHtml) {
         const line = createElement('div', 'console-line fade-in');
+        line.dataset.outputType = type;
         
-        const prompt = this.createPrompt(type);
+        // Создаем контейнер для иконки и текста
+        const wrapper = createElement('div', 'line-wrapper');
+        
+        // Иконка из констант
+        const iconHtml = PROMPT_SYMBOLS[type]?.symbol || PROMPT_SYMBOLS.info.symbol;
+        const iconSpan = createElement('span', 'line-icon');
+        iconSpan.innerHTML = iconHtml;
+        wrapper.appendChild(iconSpan);
+        
+        // Текст
         const content = this.createContent(message, isHtml);
+        wrapper.appendChild(content);
         
-        line.appendChild(prompt);
-        line.appendChild(content);
-        
-        // Добавляем data-атрибуты для стилизации и тестирования
-        line.setAttribute('data-output-type', type);
-        line.setAttribute('data-timestamp', Date.now());
-        
+        line.appendChild(wrapper);
         return line;
-    }
-
-    /**
-     * Создает элемент промпта для строки вывода
-     * @param {string} type - Тип сообщения
-     * @returns {HTMLElement} DOM элемент промпта
-     */
-    createPrompt(type) {
-        const promptConfig = PROMPT_SYMBOLS[type] || PROMPT_SYMBOLS.info;
-        
-        const promptElement = createElement('span', `prompt ${promptConfig.class}`);
-        
-        if (promptConfig.isHtml) {
-            promptElement.innerHTML = promptConfig.symbol;
-        } else {
-            promptElement.textContent = promptConfig.symbol;
-        }
-        
-        promptElement.setAttribute('aria-label', `Тип сообщения: ${type}`);
-        promptElement.setAttribute('title', `Тип: ${type}`);
-        
-        return promptElement;
     }
 
     /**
@@ -188,6 +218,7 @@ export default class OutputManager {
      * @param {string} message - Текст сообщения
      * @param {boolean} isHtml - Является ли сообщение HTML
      * @returns {HTMLElement} DOM элемент контента
+     * @private
      */
     createContent(message, isHtml) {
         const contentElement = createElement('span', 'output-content');
@@ -204,7 +235,8 @@ export default class OutputManager {
     /**
      * Определяет тип контента и обрабатывает соответствующим образом
      * @param {string} content - Контент для анализа
-     * @returns {Object} Информация о типе контента
+     * @returns {ContentAnalysis} Информация о типе контента
+     * @private
      */
     analyzeContentType(content) {
         const analysis = {
@@ -240,6 +272,9 @@ export default class OutputManager {
      * @param {string} content - Контент для вывода
      * @param {string} [type='info'] - Базовый тип сообщения
      * @returns {void}
+     * @example
+     * output.addSmart('<div>HTML content</div>'); // Будет обработан как HTML
+     * output.addSmart('SELECT * FROM users'); // Будет обработан как текст
      */
     addSmart(content, type = 'info') {
         const analysis = this.analyzeContentType(content);
@@ -257,6 +292,7 @@ export default class OutputManager {
      * Обрабатывает HTML ошибки Evolution CMS
      * @param {string} html - HTML ошибка
      * @returns {void}
+     * @private
      */
     handleEvolutionError(html) {
         try {
@@ -322,8 +358,9 @@ export default class OutputManager {
     
     /**
      * Создает секцию с бенчмарками
-     * @param {Object} benchmarks - Объект с бенчмарками
+     * @param {Object<string, string>} benchmarks - Объект с бенчмарками
      * @returns {HTMLElement} DOM элемент секции
+     * @private
      */
     createBenchmarksSection(benchmarks) {
         const section = createElement('div', 'error-section');
@@ -344,8 +381,9 @@ export default class OutputManager {
     
     /**
      * Создает секцию с backtrace
-     * @param {Array} backtrace - Массив строк backtrace
+     * @param {string[]} backtrace - Массив строк backtrace
      * @returns {HTMLElement} DOM элемент секции
+     * @private
      */
     createBacktraceSection(backtrace) {
         const section = createElement('div', 'error-section');
@@ -377,6 +415,7 @@ export default class OutputManager {
      * @param {string} html - HTML контент
      * @param {string} type - Тип сообщения
      * @returns {void}
+     * @private
      */
     addHtmlContent(html, type) {
         const container = createElement('div', 'html-content-container');
@@ -389,9 +428,23 @@ export default class OutputManager {
 
     /**
      * Обрабатывает успешный результат выполнения кода
-     * @param {Object} data - Данные результата
-     * @param {string} consoleType - Тип консоли
+     * @param {PhpResultData|SqlResultData} data - Данные результата
+     * @param {'php' | 'sql'} consoleType - Тип консоли
      * @returns {void}
+     * @example
+     * // Обработка PHP результата
+     * output.handleSuccess({
+     *   success: true,
+     *   output: 'Hello World',
+     *   execution_time: 0.5
+     * }, 'php');
+     * 
+     * // Обработка SQL результата
+     * output.handleSuccess({
+     *   success: true,
+     *   data: [{id: 1, name: 'John'}],
+     *   execution_time: 0.1
+     * }, 'sql');
      */
     handleSuccess(data, consoleType) {
         try {
@@ -415,8 +468,9 @@ export default class OutputManager {
 
     /**
      * Обрабатывает вывод PHP кода
-     * @param {Object} data - Данные результата выполнения PHP
+     * @param {PhpResultData} data - Данные результата выполнения PHP
      * @returns {void}
+     * @private
      */
     handlePhpOutput(data) {
         let hasOutput = false;
@@ -463,8 +517,9 @@ export default class OutputManager {
 
     /**
      * Обрабатывает результат SQL запроса
-     * @param {Object} data - Данные результата выполнения SQL
+     * @param {SqlResultData} data - Данные результата выполнения SQL
      * @returns {void}
+     * @private
      */
     handleSqlOutput(data) {
         const affectedRows = data.affected_rows || data.count || 0;
@@ -486,6 +541,7 @@ export default class OutputManager {
      * Отображает таблицу с данными SQL запроса
      * @param {Array<Object>} data - Массив объектов с данными
      * @returns {void}
+     * @private
      */
     displayTable(data) {
         try {
@@ -569,6 +625,8 @@ export default class OutputManager {
     /**
      * Очищает весь вывод консоли
      * @returns {void}
+     * @example
+     * output.clear(); // Очищает всю историю вывода
      */
     clear() {
         if (!this.outputElement) return;
@@ -583,6 +641,7 @@ export default class OutputManager {
      * Удаляет самые старые строки вывода
      * @param {number} [count=50] - Количество строк для удаления
      * @returns {void}
+     * @private
      */
     removeOldestLines(count = 50) {
         if (!this.outputElement) return;
@@ -618,17 +677,6 @@ export default class OutputManager {
     }
 
     /**
-     * Добавляет разделитель в вывод
-     * @returns {void}
-     */
-    addSeparator() {
-        const separator = createElement('div', 'output-separator');
-        this.outputElement.appendChild(separator);
-        this.currentLines++;
-        this.scrollToBottom();
-    }
-
-    /**
      * Добавляет сообщение об ошибке
      * @param {string} error - Текст ошибки
      * @param {string} [context=''] - Контекст ошибки
@@ -648,46 +696,6 @@ export default class OutputManager {
     addWarning(warning, context = '') {
         const message = context ? `${context}: ${warning}` : warning;
         this.add(message, 'warning');
-    }
-
-    /**
-     * Возвращает статистику использования вывода
-     * @returns {Object} Объект со статистикой
-     * @property {number} currentLines - Текущее количество строк
-     * @property {number} maxLines - Максимальное количество строк
-     * @property {string} usagePercent - Процент использования в формате строки
-     * @property {string} consoleType - Тип консоли
-     */
-    getStats() {
-        return {
-            currentLines: this.currentLines,
-            maxLines: this.maxOutputLines,
-            usagePercent: ((this.currentLines / this.maxOutputLines) * 100).toFixed(1) + '%',
-            consoleType: this.consoleType
-        };
-    }
-
-    /**
-     * Подсвечивает строки содержащие указанный паттерн
-     * @param {string} pattern - Паттерн для поиска
-     * @param {string} [className='highlight'] - CSS класс для подсветки
-     * @returns {number} Количество подсвеченных строк
-     */
-    highlightLines(pattern, className = 'highlight') {
-        if (!this.outputElement) return 0;
-        
-        const lines = this.outputElement.querySelectorAll('.output-content');
-        let highlighted = 0;
-        
-        lines.forEach(line => {
-            if (line.textContent.includes(pattern)) {
-                line.classList.add(className);
-                highlighted++;
-            }
-        });
-        
-        this.log.debug('Подсветка строк', { pattern, highlighted });
-        return highlighted;
     }
 
     /**
