@@ -22,8 +22,7 @@ Route::prefix('consolevo')->middleware([
     Route::get('/sql', [SqlConsoleController::class, 'index'])->name('consolevo.sql');
     Route::post('/sql/execute', [SqlConsoleController::class, 'execute'])->name('consolevo.sql.execute');
     Route::get('/sql/tables', [SqlConsoleController::class, 'getTablesForAutocomplete']);
-    Route::get('/sql/database-info', [SqlConsoleController::class, 'getDatabaseInfo']);
 
-    // Подсказки для PHP
+    // Подсказки для Evo
     Route::get('/analysis/unified-data', [AnalysisController::class, 'getUnifiedData']);
 });

@@ -122,30 +122,6 @@ class SqlConsoleController
         $prefix = str_replace('site_content', '', $fullTableName);
         return $prefix ?: '';
     }
-
-    /**
-     * Получить информацию о базе данных
-     */
-    public function getDatabaseInfo(): JsonResponse
-    {
-        try {
-            $databaseName = DB::getDatabaseName();
-            $prefix = $this->getTablePrefix();
-            
-            return response()->json([
-                'success' => true,
-                'database_name' => $databaseName,
-                'table_prefix' => $prefix,
-                'connection' => DB::connection()->getConfig('driver')
-            ]);
-            
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Не удалось получить информацию о базе данных: ' . $e->getMessage()
-            ]);
-        }
-    }
     
     private function addTablePrefix(string $query): string
     {
