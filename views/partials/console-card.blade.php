@@ -1,4 +1,3 @@
-{{-- components/console-card.blade.php --}}
 <div class="console-card">
     <div class="card-header">
         <div class="card-title">

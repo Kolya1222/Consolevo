@@ -1,4 +1,3 @@
-{{-- components/console-header.blade.php --}}
 <header class="header">
     <div class="logo">
         <i class="{{ $icon }}"></i>
@@ -8,7 +7,6 @@
         <a href="{{ route('consolevo.index') }}" class="btn btn-outline">
             <i class="fas fa-arrow-left"></i> Назад
         </a>
-        
         {{-- Динамические кнопки навигации --}}
         @foreach($navigation as $nav)
             <a href="{{ $nav['url'] }}" class="btn btn-outline">

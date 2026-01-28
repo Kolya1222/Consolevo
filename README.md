@@ -100,3 +100,89 @@ php artisan vendor:publish --provider="roilafx\Consolevo\ConsolevoServiceProvide
 1. Проверьте логи браузера \(F12\)
 2. Убедитесь в корректности прав доступа
 3. Проверьте совместимость версий Evolution CMS
+
+
+# Сценарий использования консоли:
+
+```mermaid
+flowchart TD
+    A[Администратор с ID 1] --> B[Нажимает кнопку в дереве]
+    B --> C{Проверка конфига}
+    C -->|useModxPopup=1| D[modx.popup]
+    C -->|useModxPopup=0| E[window.open]
+    D --> F[Выбирает консоль]
+    E --> F
+    F --> G[PHP консоль]
+    F --> H[SQL консоль]
+    G --> J[Пишет код]
+    H --> J
+    J --> K[Нажимает Выполнить]
+    K --> O[Консоль выводит результат]
+```
+
+## Структура файлов:
+
+```text
+consolevo/
+├── plugins/
+│   └── plugin.AddConsole.php           # Добавляет кнопку в боковое меню
+├── publishable/
+│   └── assets/
+│       └── plugins/
+│           └── consolevo/
+│               ├── ace-editor/         # Редактор кода (библиотека Ace-Editor)
+│               │   ├── snippets/       # Сниппеты для автодополнения
+│               │   │   ├── php.js      # PHP сниппеты
+│               │   │   └── sql.js      # SQL сниппеты
+│               │   ├── ace.js          # Ядро
+│               │   ├── mode-php.js     # Подсветка PHP синтаксиса
+│               │   ├── mode-sql.js     # Подсветка SQL синтаксиса
+│               │   └── *.js            # Расширения и темы
+│               ├── config/
+│               │   └── consolevo.php   # Конфигурация плагина (0/1)
+│               ├── css/
+│               │   ├── console.css     # Стили главной страницы
+│               │   └── php-sql-console.css # Стили редакторов PHP/SQL
+│               ├── fontawesome-7.1.0/  # Библиотека иконок
+│               └── js/
+│                   ├── modules/
+│                   │   ├── AceEditor.js          # Работа с редактором кода
+│                   │   ├── ApiClient.js          # Запросы к серверу
+│                   │   ├── ConsoleManager.js     # Фасад/координатор системы
+│                   │   ├── CommandHistory.js     # История команд
+│                   │   ├── HistoryModal.js       # Модальное окно истории
+│                   │   ├── OutputManager.js      # Управление выводом консоли
+│                   │   ├── PreferencesManager.js # Настройки пользователя
+│                   │   └── StateManager.js       # Сохранение состояния редактора
+│                   ├── utils/
+│                   │   ├── analyze-evo.js        # Для автодополнения PHP
+│                   │   ├── completion-data.js    # Данные для автодополнения SQL
+│                   │   ├── constants.js          # Константы и конфигурация
+│                   │   └── helpers.js            # Вспомогательные функции
+│                   └── console.js                # Точка входа
+├── src/
+│   ├── Analyzers/
+│   │   └── EvoAnalyzer.php            # Анализ Evolution CE для подсказок
+│   ├── Controllers/
+│   │   ├── ConsoleController.php      # Контроллер главной страницы
+│   │   ├── PhpConsoleController.php   # Контроллер PHP консоли
+│   │   ├── SqlConsoleController.php   # Контроллер SQL консоли
+│   │   └── AnalysisController.php     # Контроллер анализа Evolution CE
+│   ├── Middleware/
+│   │   └── ConsolevoAccess.php        # Проверка прав доступа
+│   └── ConsolevoServiceProvider.php   # Сервис-провайдер плагина
+├── views/
+│   ├── layouts/
+│   │   └── app.blade.php              # Базовый макет
+│   ├── partials/
+│   │   ├── console-card.blade.php     # Карточка редактора кода
+│   │   ├── console-header.blade.php   # Шапка консоли
+│   │   └── status-bar.blade.php       # Статус-бар
+│   ├── console.blade.php              # Главная страница
+│   ├── php-console.blade.php          # PHP консоль
+│   ├── sql-console.blade.php          # SQL консоль
+│   └── tree-button.blade.php          # Кнопка в дереве документов
+├── composer.json                      # Зависимости Composer
+├── routes.php                         # Маршруты плагина
+└── README.md<-------------------------# Вы тут
+```
