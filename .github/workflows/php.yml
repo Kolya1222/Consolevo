@@ -25,4 +25,4 @@ jobs:
     
     - name: Run tests
       run: |
-        php tests/
+        php tests/AnalysisControllerTest.php
