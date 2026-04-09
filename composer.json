@@ -15,6 +15,11 @@
       "roilafx\\Consolevo\\": "src"
     }
   },
+  "config": {
+    "allow-plugins": {
+      "phpdocumentor/shim": true
+    }
+  },
   "extra": {
     "laravel": {
       "providers": [
