@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<phpdocumentor>
-    <paths>
-        <output>docs/api</output>
-    </paths>
-    <version>
-        <api>
-            <source dsn=".">
-                <path>src</path>
-            </source>
-        </api>
-    </version>
+<phpdocumentor
+    configVersion="3"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://www.phpdoc.org"
+    xsi:noNamespaceSchemaLocation="https://docs.phpdoc.org/latest/phpdoc.xsd"
+>
+    <title>Consolevo API Documentation</title>
+    <parser>
+        <target>docs/cache</target>
+        <markers>
+            <item>TODO</item>
+            <item>FIXME</item>
+        </markers>
+        <extensions>
+            <extension>php</extension>
+        </extensions>
+        <visibility>public,protected,private</visibility>
+    </parser>
+    <transformer>
+        <target>docs/api</target>
+    </transformer>
+    <files>
+        <directory>src</directory>
+        <ignore>tests/*</ignore>
+    </files>
 </phpdocumentor>
