@@ -7,6 +7,19 @@ class AnalysisController
 {
     /**
      * Единый endpoint для всех данных автодополнения
+     * 
+     * @return \Illuminate\Http\JsonResponse JSON ответ с данными автодополнения
+     * 
+     * @throws \Exception При ошибке анализа кода
+     * 
+     * @example
+     * GET /api/unified-data
+     * Response: {
+     *   "success": true,
+     *   "data": {...},
+     *   "source": "dynamic",
+     *   "timestamp": 1234567890
+     * }
      */
     public function getUnifiedData()
     {
@@ -25,7 +38,6 @@ class AnalysisController
             ]);
             
         } catch (\Exception $e) {
-            // Если анализ не удался, возвращаем ошибку
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage(),
@@ -36,6 +48,11 @@ class AnalysisController
     
     /**
      * Гарантирует, что все поля данных являются массивами
+     * 
+     * @param array $data Входные данные для нормализации
+     * @return array Нормализованные данные с гарантированными массивами
+     * 
+     * @internal Этот метод используется только внутри контроллера
      */
     private function ensureArrayStructure(array $data): array
     {
@@ -50,7 +67,12 @@ class AnalysisController
     }
     
     /**
-     * Рассчитывает статистику
+     * Рассчитывает статистику по данным
+     * 
+     * @param array $data Данные с полями methods, properties, constants, functions
+     * @return array Статистика с количеством элементов каждого типа
+     * 
+     * @since 1.0.0
      */
     private function calculateStats(array $data): array
     {

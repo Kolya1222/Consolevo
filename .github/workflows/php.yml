@@ -30,3 +30,14 @@ jobs:
     - name: Run tests
       run: |
         ./vendor/bin/phpunit tests/AnalysisControllerTest.php
+    - name: Generate API documentation
+      run: |
+        composer require --dev phpdocumentor/phpdocumentor
+        ./vendor/bin/phpdoc
+        
+    - name: Deploy documentation to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/api
