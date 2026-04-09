@@ -1,14 +1,12 @@
 <?php
-require_once __DIR__ . '/../src/Controllers/AnalysisController.php';
-
+use PHPUnit\Framework\TestCase;
 use roilafx\Consolevo\Controllers\AnalysisController;
 
-$controller = new AnalysisController();
-
-// Проверка существования метода
-if (!method_exists($controller, 'getUnifiedData')) {
-    echo "FAIL: Method getUnifiedData not found\n";
-    exit(1);
+class AnalysisControllerTest extends TestCase
+{
+    public function testMethodExists()
+    {
+        $controller = new AnalysisController();
+        $this->assertTrue(method_exists($controller, 'getUnifiedData'));
+    }
 }
-
-echo "OK: All tests passed\n";
