@@ -15,8 +15,9 @@
                 <path>src</path>
             </source>
             <ignore>
-                <path>tests/**/*</path>
+                <path>tests</path>
             </ignore>
+            <include-source>true</include-source>
         </api>
     </version>
 </phpdocumentor>

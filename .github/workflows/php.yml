@@ -33,7 +33,7 @@ jobs:
     
     - name: Generate API documentation
       run: |
-        ./vendor/bin/phpdoc
+        ./vendor/bin/phpdoc -d src -t docs/api --ignore="tests/*"
     
     - name: Deploy documentation to GitHub Pages
       if: github.ref == 'refs/heads/main'
