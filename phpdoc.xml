@@ -14,8 +14,9 @@
             <source dsn=".">
                 <path>src</path>
             </source>
-            <include source="src"/>
-            <ignore>tests/**/*</ignore>
+            <ignore>
+                <path>tests/**/*</path>
+            </ignore>
         </api>
     </version>
 </phpdocumentor>
