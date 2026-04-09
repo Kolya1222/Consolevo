@@ -7,7 +7,7 @@
 │  ConsoleController                                          │
 │  ├── Роль: Главная страница (дашборд)                       │
 │  ├── Метод: index() → view('consolevo::console')            │
-│  └── Маршрут: GET /consolevo                               │
+│  └── Маршрут: GET /consolevo                                │
 ├─────────────────────────────────────────────────────────────┤
 │  PhpConsoleController                                       │
 │  ├── Роль: Выполнение PHP кода                              │
